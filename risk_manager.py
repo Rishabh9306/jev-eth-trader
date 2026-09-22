@@ -334,11 +334,11 @@ class RiskManager:
     ) -> Tuple[float, float]:
         """Calculates dynamic asymmetric stop loss (1.8%) and take profit (4.0%) with 2.2:1 reward-to-risk."""
         if self.config.use_atr_stop and atr_14 and atr_14 > 0:
-            stop_dist = min(entry_price * 0.020, max(entry_price * 0.012, self.config.atr_multiplier * atr_14))
-            tp_dist = max(entry_price * 0.038, stop_dist * 2.2)
+            stop_dist = min(entry_price * 0.015, max(entry_price * 0.007, self.config.atr_multiplier * atr_14 * 0.8))
+            tp_dist = max(entry_price * 0.030, stop_dist * 3.0)
         else:
-            stop_dist = entry_price * 0.018  # 1.8% initial stop
-            tp_dist = entry_price * 0.040    # 4.0% target (2.2:1 RR)
+            stop_dist = entry_price * 0.012  # 1.2% initial stop (tighter)
+            tp_dist = entry_price * 0.036    # 3.6% target (3.0:1 RR ratio)
 
         if side.upper() == "SHORT":
             stop_loss = entry_price + stop_dist
@@ -383,16 +383,16 @@ class RiskManager:
 
             # 2. Stateful Breakeven & Trailing Stop Ratchet
             gain_pct = (current_price - entry_price) / entry_price
-            if gain_pct >= 0.025:
-                # Up +2.5% (+5.0% ROE): Ratchet stop loss to lock in +1.5% profit (+3.0% ROE)
-                trail_stop = round_price(entry_price * 1.015, entry_price)
+            if gain_pct >= 0.018:
+                # Up +1.8% (+3.6% ROE): Ratchet stop loss to lock in +1.0% profit (+2.0% ROE)
+                trail_stop = round_price(entry_price * 1.010, entry_price)
                 if stop_loss is None or trail_stop > stop_loss:
                     stop_loss = trail_stop
                     if target_engine and hasattr(target_engine, "update_position_stops"):
                         target_engine.update_position_stops(pos_sym, stop_loss_price=trail_stop)
                     logger.info(f"RATCHETED STOP-LOSS (LONG {pos_sym}): moved to {format_price(trail_stop)} (locking +1.5% profit / +3.0% ROE)")
-            elif gain_pct >= 0.012:
-                # Up +1.2% (+2.4% ROE): Ratchet stop loss to Breakeven (+0.30% buffer covers all fees)
+            elif gain_pct >= 0.007:
+                # Up +0.7% (+1.4% ROE): Ratchet stop loss to Breakeven (+0.30% buffer covers all fees)
                 be_stop = round_price(entry_price * 1.003, entry_price)
                 if stop_loss is None or be_stop > stop_loss:
                     stop_loss = be_stop
@@ -439,16 +439,16 @@ class RiskManager:
 
             # 2. Stateful Breakeven & Trailing Stop Ratchet
             gain_pct = (entry_price - current_price) / entry_price
-            if gain_pct >= 0.025:
-                # Down -2.5% on price (+5.0% ROE): Ratchet stop loss down to lock in +1.5% profit (+3.0% ROE)
-                trail_stop = round_price(entry_price * 0.985, entry_price)
+            if gain_pct >= 0.018:
+                # Down -1.8% on price (+3.6% ROE): Ratchet stop loss down to lock in +1.0% profit (+2.0% ROE)
+                trail_stop = round_price(entry_price * 0.990, entry_price)
                 if stop_loss is None or trail_stop < stop_loss:
                     stop_loss = trail_stop
                     if target_engine and hasattr(target_engine, "update_position_stops"):
                         target_engine.update_position_stops(pos_sym, stop_loss_price=trail_stop)
                     logger.info(f"RATCHETED STOP-LOSS (SHORT {pos_sym}): moved down to {format_price(trail_stop)} (locking +1.5% profit / +3.0% ROE)")
-            elif gain_pct >= 0.012:
-                # Down -1.2% on price (+2.4% ROE): Ratchet stop loss down to Breakeven (+0.30% fee buffer)
+            elif gain_pct >= 0.007:
+                # Down -0.7% on price (+1.4% ROE): Ratchet stop loss down to Breakeven (+0.30% fee buffer)
                 be_stop = round_price(entry_price * 0.997, entry_price)
                 if stop_loss is None or be_stop < stop_loss:
                     stop_loss = be_stop
@@ -606,7 +606,7 @@ class RiskManager:
 
         # Desk-wide risk control: maximum 6 concurrent open positions across the entire desk
         active_desk_count = portfolio.get("active_positions_count", 0)
-        if active_desk_count >= 6:
+        if active_desk_count >= 3:
             return OrderPlan(
                 should_execute=False,
                 order_type="HOLD",
@@ -619,7 +619,7 @@ class RiskManager:
                 risk_score=decision.risk_score,
             )
 
-        if lean >= entry_threshold:
+        if lean >= entry_threshold and p_long >= 0.52:
             # Rule: Never go LONG into a confirmed BEARISH_BREAKDOWN
             if decision.market_regime == "BEARISH_BREAKDOWN":
                 return OrderPlan(
@@ -651,7 +651,7 @@ class RiskManager:
                 risk_score=decision.risk_score,
             )
 
-        elif lean <= -entry_threshold:
+        elif lean <= -entry_threshold and p_short >= 0.52:
             # Rule: Never go SHORT into a confirmed BULLISH_EXPANSION
             if decision.market_regime == "BULLISH_EXPANSION":
                 return OrderPlan(

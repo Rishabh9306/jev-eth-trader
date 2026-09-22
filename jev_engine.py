@@ -248,6 +248,14 @@ class JevEngine:
         elif macd_cross == "BEARISH_CROSS":
             trend_score -= 0.10
 
+        # 6. Bollinger Band extreme position signals
+        boll_pct_b = ind.get("bollinger_percent_b", 0.5)
+        if boll_pct_b is not None:
+            if boll_pct_b < 0.15:
+                trend_score += 0.12  # Strong oversold bounce potential
+            elif boll_pct_b > 0.85:
+                trend_score -= 0.12  # Strong overbought mean reversion
+
         # 5. Funding rate edge
         funding = deriv.get("funding_rate_8h", 0.0)
         if funding < -0.0001:
@@ -293,7 +301,7 @@ class JevEngine:
             "HOLD": round(p_hold, 4),
         }
         action_conf = round(max(p_buy, p_sell, p_hold), 3)
-        entry_conviction = round(min(0.90, max(0.15, 0.40 + (abs(s) * 0.45))), 3)
+        entry_conviction = round(min(0.90, max(0.05, 0.20 + (abs(s) * 0.65))), 3)
 
         # Portfolio exit urgency check
         has_pos = portfolio_state.get("has_open_position", False)

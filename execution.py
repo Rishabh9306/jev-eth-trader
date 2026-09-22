@@ -1096,8 +1096,15 @@ class PaperTradingEngine(BaseExecutionEngine):
         target_sym = symbol or self.symbol
         is_btc = target_sym in ("BTCUSDT", "BTC-PERPETUAL")
 
+        used_times: dict = {}
+
+        def unique_time(ts: int, position: str) -> int:
+            key = (ts, position)
+            count = used_times.get(key, 0)
+            used_times[key] = count + 1
+            return ts + count  # offset duplicates by 1 second each
+
         for trade in self.trade_history:
-            # Filter by symbol if specified
             if symbol:
                 trade_is_btc = trade.symbol in ("BTCUSDT", "BTC-PERPETUAL")
                 if is_btc:
@@ -1113,42 +1120,41 @@ class PaperTradingEngine(BaseExecutionEngine):
             except Exception:
                 ts_sec = int(datetime.now(timezone.utc).timestamp())
 
+            price = trade.effective_price
+            # Compact price: use integer for large prices, 4dp for micro prices
+            if price >= 100:
+                price_str = f"${int(price):,}"
+            elif price >= 1:
+                price_str = f"${price:.2f}"
+            else:
+                price_str = f"${price:.5f}"
+
             if trade.side in ("LONG", "BUY"):
-                markers.append({
-                    "time": ts_sec,
-                    "position": "belowBar",
-                    "color": "#22c55e",
-                    "shape": "arrowUp",
-                    "text": f"BUY (LONG) @ ${trade.effective_price:,.1f}",
-                })
+                pos = "belowBar"
+                t = unique_time(ts_sec, pos)
+                markers.append({"time": t, "position": pos, "color": "#22c55e",
+                    "shape": "arrowUp", "text": f"L {price_str}"})
             elif trade.side in ("SHORT", "SELL"):
-                markers.append({
-                    "time": ts_sec,
-                    "position": "aboveBar",
-                    "color": "#ef4444",
-                    "shape": "arrowDown",
-                    "text": f"SELL (SHORT) @ ${trade.effective_price:,.1f}",
-                })
+                pos = "aboveBar"
+                t = unique_time(ts_sec, pos)
+                markers.append({"time": t, "position": pos, "color": "#f43f5e",
+                    "shape": "arrowDown", "text": f"S {price_str}"})
             elif trade.side == "EXIT_LONG":
                 pnl = trade.realized_pnl_usd
-                pnl_color = "#10b981" if pnl >= 0 else "#ef4444"
-                markers.append({
-                    "time": ts_sec,
-                    "position": "aboveBar",
-                    "color": pnl_color,
-                    "shape": "circle",
-                    "text": f"SELL (CLOSE LONG) ({pnl:+.1f}$)",
-                })
+                color = "#10b981" if pnl >= 0 else "#ef4444"
+                sign = "+" if pnl >= 0 else ""
+                pos = "aboveBar"
+                t = unique_time(ts_sec, pos)
+                markers.append({"time": t, "position": pos, "color": color,
+                    "shape": "circle", "text": f"{sign}${int(pnl)}"})
             elif trade.side == "EXIT_SHORT":
                 pnl = trade.realized_pnl_usd
-                pnl_color = "#10b981" if pnl >= 0 else "#ef4444"
-                markers.append({
-                    "time": ts_sec,
-                    "position": "belowBar",
-                    "color": pnl_color,
-                    "shape": "circle",
-                    "text": f"BUY (COVER SHORT) ({pnl:+.1f}$)",
-                })
+                color = "#10b981" if pnl >= 0 else "#ef4444"
+                sign = "+" if pnl >= 0 else ""
+                pos = "belowBar"
+                t = unique_time(ts_sec, pos)
+                markers.append({"time": t, "position": pos, "color": color,
+                    "shape": "circle", "text": f"{sign}${int(pnl)}"})
 
         return markers
 

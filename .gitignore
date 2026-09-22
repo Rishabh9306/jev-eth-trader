@@ -29,3 +29,5 @@ trade_logs.sqlite
 Thumbs.db
 .idea/
 .vscode/
+
+.vercel
