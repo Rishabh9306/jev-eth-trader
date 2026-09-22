@@ -383,25 +383,25 @@ class RiskManager:
 
             # 2. 4-Tier Stateful Profit Locks
             gain_pct = (current_price - entry_price) / entry_price
-            if gain_pct >= 0.018:
-                # Tier 3: Up +1.8% (+3.6% ROE) -> Ratchet stop loss to lock in +1.20% profit (+2.4% ROE guaranteed!)
-                trail_stop = round_price(entry_price * 1.012, entry_price)
+            if gain_pct >= 0.020:
+                # Tier 3: Up +2.0% (+4.0% ROE) -> Ratchet stop loss to lock in +1.40% profit (+2.8% ROE guaranteed!)
+                trail_stop = round_price(entry_price * 1.0140, entry_price)
                 if stop_loss is None or trail_stop > stop_loss:
                     stop_loss = trail_stop
                     if target_engine and hasattr(target_engine, "update_position_stops"):
                         target_engine.update_position_stops(pos_sym, stop_loss_price=trail_stop)
-                    logger.info(f"RATCHETED STOP-LOSS (LONG {pos_sym}): moved to {format_price(trail_stop)} (locking +1.2% profit / +2.4% ROE)")
-            elif gain_pct >= 0.010:
-                # Tier 2: Up +1.0% (+2.0% ROE) -> Ratchet stop loss to lock in +0.50% profit (+1.0% ROE guaranteed!)
-                trail_stop = round_price(entry_price * 1.005, entry_price)
+                    logger.info(f"RATCHETED STOP-LOSS (LONG {pos_sym}): moved to {format_price(trail_stop)} (locking +1.4% profit / +2.8% ROE)")
+            elif gain_pct >= 0.014:
+                # Tier 2: Up +1.4% (+2.8% ROE) -> Ratchet stop loss to lock in +0.70% profit (+1.4% ROE guaranteed!)
+                trail_stop = round_price(entry_price * 1.0070, entry_price)
                 if stop_loss is None or trail_stop > stop_loss:
                     stop_loss = trail_stop
                     if target_engine and hasattr(target_engine, "update_position_stops"):
                         target_engine.update_position_stops(pos_sym, stop_loss_price=trail_stop)
-                    logger.info(f"RATCHETED STOP-LOSS (LONG {pos_sym}): moved to {format_price(trail_stop)} (locking +0.5% profit / +1.0% ROE)")
-            elif gain_pct >= 0.005:
-                # Tier 1: Up +0.5% (+1.0% ROE) -> Ratchet stop loss to Breakeven (+0.20% buffer covers all 10 bps fees!)
-                be_stop = round_price(entry_price * 1.002, entry_price)
+                    logger.info(f"RATCHETED STOP-LOSS (LONG {pos_sym}): moved to {format_price(trail_stop)} (locking +0.7% profit / +1.4% ROE)")
+            elif gain_pct >= 0.008:
+                # Tier 1: Up +0.8% (+1.6% ROE) -> Ratchet stop loss to Breakeven (+0.35% buffer covers all fees + slippage + net green!)
+                be_stop = round_price(entry_price * 1.0035, entry_price)
                 if stop_loss is None or be_stop > stop_loss:
                     stop_loss = be_stop
                     if target_engine and hasattr(target_engine, "update_position_stops"):
@@ -447,25 +447,25 @@ class RiskManager:
 
             # 2. 4-Tier Stateful Profit Locks
             gain_pct = (entry_price - current_price) / entry_price
-            if gain_pct >= 0.018:
-                # Tier 3: Down -1.8% on price (+3.6% ROE) -> Ratchet stop loss down to lock in +1.20% profit (+2.4% ROE)
-                trail_stop = round_price(entry_price * 0.988, entry_price)
+            if gain_pct >= 0.020:
+                # Tier 3: Down -2.0% on price (+4.0% ROE) -> Ratchet stop loss down to lock in +1.40% profit (+2.8% ROE)
+                trail_stop = round_price(entry_price * 0.9860, entry_price)
                 if stop_loss is None or trail_stop < stop_loss:
                     stop_loss = trail_stop
                     if target_engine and hasattr(target_engine, "update_position_stops"):
                         target_engine.update_position_stops(pos_sym, stop_loss_price=trail_stop)
-                    logger.info(f"RATCHETED STOP-LOSS (SHORT {pos_sym}): moved down to {format_price(trail_stop)} (locking +1.2% profit / +2.4% ROE)")
-            elif gain_pct >= 0.010:
-                # Tier 2: Down -1.0% on price (+2.0% ROE) -> Ratchet stop loss down to lock in +0.50% profit (+1.0% ROE)
-                trail_stop = round_price(entry_price * 0.995, entry_price)
+                    logger.info(f"RATCHETED STOP-LOSS (SHORT {pos_sym}): moved down to {format_price(trail_stop)} (locking +1.4% profit / +2.8% ROE)")
+            elif gain_pct >= 0.014:
+                # Tier 2: Down -1.4% on price (+2.8% ROE) -> Ratchet stop loss down to lock in +0.70% profit (+1.4% ROE)
+                trail_stop = round_price(entry_price * 0.9930, entry_price)
                 if stop_loss is None or trail_stop < stop_loss:
                     stop_loss = trail_stop
                     if target_engine and hasattr(target_engine, "update_position_stops"):
                         target_engine.update_position_stops(pos_sym, stop_loss_price=trail_stop)
-                    logger.info(f"RATCHETED STOP-LOSS (SHORT {pos_sym}): moved down to {format_price(trail_stop)} (locking +0.5% profit / +1.0% ROE)")
-            elif gain_pct >= 0.005:
-                # Tier 1: Down -0.5% on price (+1.0% ROE) -> Ratchet stop loss down to Breakeven (+0.20% fee buffer)
-                be_stop = round_price(entry_price * 0.998, entry_price)
+                    logger.info(f"RATCHETED STOP-LOSS (SHORT {pos_sym}): moved down to {format_price(trail_stop)} (locking +0.7% profit / +1.4% ROE)")
+            elif gain_pct >= 0.008:
+                # Tier 1: Down -0.8% on price (+1.6% ROE) -> Ratchet stop loss down to Breakeven (+0.35% fee buffer)
+                be_stop = round_price(entry_price * 0.9965, entry_price)
                 if stop_loss is None or be_stop < stop_loss:
                     stop_loss = be_stop
                     if target_engine and hasattr(target_engine, "update_position_stops"):
