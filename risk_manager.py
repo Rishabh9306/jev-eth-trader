@@ -332,13 +332,13 @@ class RiskManager:
         atr_14: Optional[float] = None,
         side: str = "LONG",
     ) -> Tuple[float, float]:
-        """Calculates dynamic asymmetric stop loss (1.8%) and take profit (4.0%) with 2.2:1 reward-to-risk."""
+        """Calculates dynamic asymmetric stop loss (1.0%) and take profit (3.0%) with 3.0:1 reward-to-risk."""
         if self.config.use_atr_stop and atr_14 and atr_14 > 0:
-            stop_dist = min(entry_price * 0.015, max(entry_price * 0.007, self.config.atr_multiplier * atr_14 * 0.8))
-            tp_dist = max(entry_price * 0.030, stop_dist * 3.0)
+            stop_dist = min(entry_price * 0.015, max(entry_price * 0.007, self.config.atr_multiplier * atr_14 * 0.75))
+            tp_dist = max(entry_price * 0.028, stop_dist * 3.0)
         else:
-            stop_dist = entry_price * 0.012  # 1.2% initial stop (tighter)
-            tp_dist = entry_price * 0.036    # 3.6% target (3.0:1 RR ratio)
+            stop_dist = entry_price * 0.010  # 1.0% initial stop loss (-2.0% ROE)
+            tp_dist = entry_price * 0.030    # 3.0% target (+6.0% ROE)
 
         if side.upper() == "SHORT":
             stop_loss = entry_price + stop_dist
@@ -366,7 +366,7 @@ class RiskManager:
         target_engine = engine or getattr(self, "engine", None)
 
         if pos_side == "LONG" and entry_price > 0:
-            # 1. Take Profit Hit (+4.0% target)
+            # 1. Take Profit Hit
             if take_profit and current_price >= take_profit:
                 logger.info(f"TAKE PROFIT triggered (LONG {pos_sym}): {format_price(current_price)} >= {format_price(take_profit)}")
                 return OrderPlan(
@@ -381,19 +381,35 @@ class RiskManager:
                     risk_score=1.0,
                 )
 
-            # 2. Stateful Breakeven & Trailing Stop Ratchet
+            # 2. Stateful Breakeven & Multi-Tier Trailing Profit Ratchet
             gain_pct = (current_price - entry_price) / entry_price
-            if gain_pct >= 0.018:
-                # Up +1.8% (+3.6% ROE): Ratchet stop loss to lock in +1.0% profit (+2.0% ROE)
+            if gain_pct >= 0.024:
+                # Up +2.4% (+4.8% ROE): Lock +1.8% profit
+                trail_stop = round_price(entry_price * 1.018, entry_price)
+                if stop_loss is None or trail_stop > stop_loss:
+                    stop_loss = trail_stop
+                    if target_engine and hasattr(target_engine, "update_position_stops"):
+                        target_engine.update_position_stops(pos_sym, stop_loss_price=trail_stop)
+                    logger.info(f"RATCHETED STOP-LOSS (LONG {pos_sym}): moved to {format_price(trail_stop)} (locking +1.8% profit)")
+            elif gain_pct >= 0.015:
+                # Up +1.5% (+3.0% ROE): Lock +1.0% profit
                 trail_stop = round_price(entry_price * 1.010, entry_price)
                 if stop_loss is None or trail_stop > stop_loss:
                     stop_loss = trail_stop
                     if target_engine and hasattr(target_engine, "update_position_stops"):
                         target_engine.update_position_stops(pos_sym, stop_loss_price=trail_stop)
-                    logger.info(f"RATCHETED STOP-LOSS (LONG {pos_sym}): moved to {format_price(trail_stop)} (locking +1.5% profit / +3.0% ROE)")
-            elif gain_pct >= 0.007:
-                # Up +0.7% (+1.4% ROE): Ratchet stop loss to Breakeven (+0.30% buffer covers all fees)
-                be_stop = round_price(entry_price * 1.003, entry_price)
+                    logger.info(f"RATCHETED STOP-LOSS (LONG {pos_sym}): moved to {format_price(trail_stop)} (locking +1.0% profit)")
+            elif gain_pct >= 0.008:
+                # Up +0.8% (+1.6% ROE): Lock +0.40% profit (guaranteed green after all fees)
+                trail_stop = round_price(entry_price * 1.004, entry_price)
+                if stop_loss is None or trail_stop > stop_loss:
+                    stop_loss = trail_stop
+                    if target_engine and hasattr(target_engine, "update_position_stops"):
+                        target_engine.update_position_stops(pos_sym, stop_loss_price=trail_stop)
+                    logger.info(f"RATCHETED STOP-LOSS (LONG {pos_sym}): moved to {format_price(trail_stop)} (locking +0.4% profit)")
+            elif gain_pct >= 0.004:
+                # Up +0.4% (+0.8% ROE): Ratchet stop loss to Breakeven (+0.25% fee buffer covers all taker fees)
+                be_stop = round_price(entry_price * 1.0025, entry_price)
                 if stop_loss is None or be_stop > stop_loss:
                     stop_loss = be_stop
                     if target_engine and hasattr(target_engine, "update_position_stops"):
@@ -437,19 +453,35 @@ class RiskManager:
                     risk_score=1.0,
                 )
 
-            # 2. Stateful Breakeven & Trailing Stop Ratchet
+            # 2. Stateful Breakeven & Multi-Tier Trailing Profit Ratchet
             gain_pct = (entry_price - current_price) / entry_price
-            if gain_pct >= 0.018:
-                # Down -1.8% on price (+3.6% ROE): Ratchet stop loss down to lock in +1.0% profit (+2.0% ROE)
+            if gain_pct >= 0.024:
+                # Down -2.4% (+4.8% ROE): Lock +1.8% profit
+                trail_stop = round_price(entry_price * 0.982, entry_price)
+                if stop_loss is None or trail_stop < stop_loss:
+                    stop_loss = trail_stop
+                    if target_engine and hasattr(target_engine, "update_position_stops"):
+                        target_engine.update_position_stops(pos_sym, stop_loss_price=trail_stop)
+                    logger.info(f"RATCHETED STOP-LOSS (SHORT {pos_sym}): moved down to {format_price(trail_stop)} (locking +1.8% profit)")
+            elif gain_pct >= 0.015:
+                # Down -1.5% (+3.0% ROE): Lock +1.0% profit
                 trail_stop = round_price(entry_price * 0.990, entry_price)
                 if stop_loss is None or trail_stop < stop_loss:
                     stop_loss = trail_stop
                     if target_engine and hasattr(target_engine, "update_position_stops"):
                         target_engine.update_position_stops(pos_sym, stop_loss_price=trail_stop)
-                    logger.info(f"RATCHETED STOP-LOSS (SHORT {pos_sym}): moved down to {format_price(trail_stop)} (locking +1.5% profit / +3.0% ROE)")
-            elif gain_pct >= 0.007:
-                # Down -0.7% on price (+1.4% ROE): Ratchet stop loss down to Breakeven (+0.30% fee buffer)
-                be_stop = round_price(entry_price * 0.997, entry_price)
+                    logger.info(f"RATCHETED STOP-LOSS (SHORT {pos_sym}): moved down to {format_price(trail_stop)} (locking +1.0% profit)")
+            elif gain_pct >= 0.008:
+                # Down -0.8% (+1.6% ROE): Lock +0.40% profit (guaranteed green after all fees)
+                trail_stop = round_price(entry_price * 0.996, entry_price)
+                if stop_loss is None or trail_stop < stop_loss:
+                    stop_loss = trail_stop
+                    if target_engine and hasattr(target_engine, "update_position_stops"):
+                        target_engine.update_position_stops(pos_sym, stop_loss_price=trail_stop)
+                    logger.info(f"RATCHETED STOP-LOSS (SHORT {pos_sym}): moved down to {format_price(trail_stop)} (locking +0.4% profit)")
+            elif gain_pct >= 0.004:
+                # Down -0.4% (+0.8% ROE): Ratchet stop loss down to Breakeven (+0.25% fee buffer)
+                be_stop = round_price(entry_price * 0.9975, entry_price)
                 if stop_loss is None or be_stop < stop_loss:
                     stop_loss = be_stop
                     if target_engine and hasattr(target_engine, "update_position_stops"):
@@ -556,37 +588,39 @@ class RiskManager:
                     risk_score=decision.risk_score,
                 )
 
-            # Check C: Lean Reversal — use wide band so TP/SL are primary exit mechanisms.
-            # Only exit on strong directional reversal (lean threshold = ±0.12) to prevent
-            # profitable positions from being closed by short-term noise before TP is hit.
-            if pos_side == "LONG" and lean <= -0.12:
-                logger.info(f"Policy EXIT_LONG: lean reversed to {lean:+.3f} (<= -0.12)")
-                return OrderPlan(
-                    should_execute=True,
-                    order_type="EXIT_LONG",
-                    size_usd=pos_size * current_price,
-                    size_eth=pos_size,
-                    stop_loss_price=None,
-                    take_profit_price=None,
-                    reason=f"Policy Exit: Lean reversed to {lean:+.2f} (<= -0.12)",
-                    confidence=abs(lean),
-                    risk_score=decision.risk_score,
-                )
-            elif pos_side == "SHORT" and lean >= 0.12:
-                logger.info(f"Policy EXIT_SHORT: lean reversed to {lean:+.3f} (>= +0.12)")
-                return OrderPlan(
-                    should_execute=True,
-                    order_type="EXIT_SHORT",
-                    size_usd=pos_size * current_price,
-                    size_eth=pos_size,
-                    stop_loss_price=None,
-                    take_profit_price=None,
-                    reason=f"Policy Exit: Lean reversed to {lean:+.2f} (>= +0.12)",
-                    confidence=abs(lean),
-                    risk_score=decision.risk_score,
-                )
+            # Check C: Severe Lean Reversal — only permitted after minimum holding time (8m)
+            # and only if lean has severely reversed (<= -0.40 for LONG, >= +0.40 for SHORT).
+            # This completely eliminates 30-second noise exits that were burning fees!
+            minutes_held = portfolio.get("minutes_held", 0)
+            if minutes_held >= 8:
+                if pos_side == "LONG" and lean <= -0.40:
+                    logger.info(f"Policy EXIT_LONG: lean severely reversed to {lean:+.3f} after {minutes_held}m")
+                    return OrderPlan(
+                        should_execute=True,
+                        order_type="EXIT_LONG",
+                        size_usd=pos_size * current_price,
+                        size_eth=pos_size,
+                        stop_loss_price=None,
+                        take_profit_price=None,
+                        reason=f"Policy Exit: Severe lean reversal to {lean:+.2f} after {minutes_held}m",
+                        confidence=abs(lean),
+                        risk_score=decision.risk_score,
+                    )
+                elif pos_side == "SHORT" and lean >= 0.40:
+                    logger.info(f"Policy EXIT_SHORT: lean severely reversed to {lean:+.3f} after {minutes_held}m")
+                    return OrderPlan(
+                        should_execute=True,
+                        order_type="EXIT_SHORT",
+                        size_usd=pos_size * current_price,
+                        size_eth=pos_size,
+                        stop_loss_price=None,
+                        take_profit_price=None,
+                        reason=f"Policy Exit: Severe lean reversal to {lean:+.2f} after {minutes_held}m",
+                        confidence=abs(lean),
+                        risk_score=decision.risk_score,
+                    )
 
-            # Otherwise, keep holding
+            # Otherwise, keep holding and let TP, Trailing Profit, or SL govern
             active_stop = portfolio.get("stop_loss_price")
             active_tp = portfolio.get("take_profit_price")
             return OrderPlan(
@@ -596,7 +630,7 @@ class RiskManager:
                 size_eth=0.0,
                 stop_loss_price=active_stop,
                 take_profit_price=active_tp,
-                reason=f"Holding active {pos_side}; lean {lean:+.2f} still favorable",
+                reason=f"Holding active {pos_side} ({minutes_held}m); letting profit targets develop",
                 confidence=abs(lean),
                 risk_score=decision.risk_score,
             )
@@ -604,7 +638,7 @@ class RiskManager:
         # 3. Position Entry by Directional Lean Policy
         entry_threshold = max(0.20, threshold)
 
-        # Desk-wide risk control: maximum 6 concurrent open positions across the entire desk
+        # Desk-wide risk control: maximum 3 concurrent open positions across the entire desk
         active_desk_count = portfolio.get("active_positions_count", 0)
         if active_desk_count >= 3:
             return OrderPlan(
@@ -620,8 +654,8 @@ class RiskManager:
             )
 
         if lean >= entry_threshold and p_long >= 0.52:
-            # Rule: Never go LONG into a confirmed BEARISH_BREAKDOWN
-            if decision.market_regime == "BEARISH_BREAKDOWN":
+            # Rule: Never go LONG into a confirmed BEARISH regime
+            if "BEAR" in decision.market_regime:
                 return OrderPlan(
                     should_execute=False,
                     order_type="HOLD",
@@ -629,7 +663,7 @@ class RiskManager:
                     size_eth=0.0,
                     stop_loss_price=None,
                     take_profit_price=None,
-                    reason=f"Trend Filter: Rejected LONG into macro BEARISH_BREAKDOWN",
+                    reason=f"Trend Filter: Rejected LONG into macro {decision.market_regime}",
                     confidence=abs(lean),
                     risk_score=decision.risk_score,
                 )
@@ -652,8 +686,8 @@ class RiskManager:
             )
 
         elif lean <= -entry_threshold and p_short >= 0.52:
-            # Rule: Never go SHORT into a confirmed BULLISH_EXPANSION
-            if decision.market_regime == "BULLISH_EXPANSION":
+            # Rule: Never go SHORT into a confirmed BULLISH regime
+            if "BULL" in decision.market_regime:
                 return OrderPlan(
                     should_execute=False,
                     order_type="HOLD",
@@ -661,7 +695,7 @@ class RiskManager:
                     size_eth=0.0,
                     stop_loss_price=None,
                     take_profit_price=None,
-                    reason=f"Trend Filter: Rejected SHORT into macro BULLISH_EXPANSION",
+                    reason=f"Trend Filter: Rejected SHORT into macro {decision.market_regime}",
                     confidence=abs(lean),
                     risk_score=decision.risk_score,
                 )
