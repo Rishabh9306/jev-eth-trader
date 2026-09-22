@@ -200,73 +200,65 @@ class JevEngine:
         flow = market_state.get("order_flow", {})
         deriv = market_state.get("derivatives", {})
 
-        # 1. Macro & micro trend alignment
+        # 1. Macro Trend (The Tide)
         trend_score = 0.0
         t1h = str(ind.get("trend_alignment_1h", "NEUTRAL") or "").upper()
-        t5m = str(ind.get("trend_alignment_5m", "NEUTRAL") or "").upper()
         is_bull_1h = "BULL" in t1h
         is_bear_1h = "BEAR" in t1h
-        is_bull_5m = "BULL" in t5m
-        is_bear_5m = "BEAR" in t5m
 
-        if is_bull_1h and is_bull_5m:
-            trend_score += 0.45  # Confirmed multi-timeframe bullish trend
-        elif is_bear_1h and is_bear_5m:
-            trend_score -= 0.45  # Confirmed multi-timeframe bearish breakdown
-        elif is_bull_1h and not is_bear_5m:
-            trend_score += 0.25  # Macro bull with neutral/recovering 5m
-        elif is_bear_1h and not is_bull_5m:
-            trend_score -= 0.25  # Macro bear with neutral/recovering 5m
-        elif is_bull_1h and is_bear_5m:
-            trend_score += 0.05  # Dip inside macro uptrend (buy dip setup)
-        elif is_bear_1h and is_bull_5m:
-            trend_score -= 0.05  # Rally inside macro downtrend (fade rally setup)
+        if is_bull_1h:
+            trend_score += 0.35  # Macro bull bias: only buy dips
+        elif is_bear_1h:
+            trend_score -= 0.35  # Macro bear bias: only sell rips
 
-        # 2. VWAP deviation
-        vwap_pct = flow.get("price_to_vwap_pct", 0.0)
-        if vwap_pct > 0.15:
-            trend_score += 0.15
-        elif vwap_pct < -0.15:
-            trend_score -= 0.15
-
-        # 3. Order flow aggression
-        ratio = flow.get("taker_buy_sell_ratio", 1.0)
-        if ratio > 1.08:
-            trend_score += 0.20
-        elif ratio < 0.92:
-            trend_score -= 0.20
-
-        # 4. RSI momentum & MACD
+        # 2. Key 5m Value & Oscillators
         rsi = ind.get("rsi_14", 50.0)
-        if 55.0 <= rsi <= 70.0:
-            trend_score += 0.10
-        elif 30.0 <= rsi <= 45.0:
-            trend_score -= 0.10
-        elif rsi > 75.0:
-            trend_score -= 0.15  # Overbought exhaustion risk
-        elif rsi < 25.0:
-            trend_score += 0.15  # Oversold bounce potential
-
-        macd_cross = ind.get("macd_cross", "NEUTRAL")
-        if macd_cross == "BULLISH_CROSS":
-            trend_score += 0.10
-        elif macd_cross == "BEARISH_CROSS":
-            trend_score -= 0.10
-
-        # 6. Bollinger Band extreme position signals
         boll_pct_b = ind.get("bollinger_percent_b", 0.5)
-        if boll_pct_b is not None:
-            if boll_pct_b < 0.15:
-                trend_score += 0.12  # Strong oversold bounce potential
-            elif boll_pct_b > 0.85:
-                trend_score -= 0.12  # Strong overbought mean reversion
+        vwap_pct = flow.get("price_to_vwap_pct", 0.0)
+        macd_cross = ind.get("macd_cross", "NEUTRAL")
 
-        # 5. Funding rate edge
+        # 3. Smart-Money Entry Timing (Anti-Chasing: Buy the Dip in Bull, Sell the Rip in Bear)
+        if is_bull_1h:
+            # ANTI-TOP GUARD: If price is already pumped at the top of the candle, DO NOT BUY!
+            if boll_pct_b > 0.65 or rsi > 58 or vwap_pct > 0.25:
+                trend_score -= 0.50  # Overbought exhaustion penalty — prevents buying the top!
+            # PRIME DIP ENTRY: Price pulled back to support / lower half of band, RSI cooled off
+            if boll_pct_b <= 0.40 and rsi <= 52:
+                trend_score += 0.40  # Discount pullback buy!
+            if boll_pct_b <= 0.20 or rsi <= 35:
+                trend_score += 0.25  # Oversold flush bounce opportunity
+            if vwap_pct <= 0.05:
+                trend_score += 0.15  # Buying near or below fair value VWAP
+            if macd_cross == "BULLISH_CROSS" and rsi <= 55:
+                trend_score += 0.15  # Fresh upward turn off support
+
+        elif is_bear_1h:
+            # ANTI-BOTTOM GUARD: If price is already dumped at the bottom, DO NOT SHORT!
+            if boll_pct_b < 0.35 or rsi < 42 or vwap_pct < -0.25:
+                trend_score += 0.50  # Oversold exhaustion penalty — prevents shorting the bottom!
+            # PRIME RIP ENTRY: Price bounced to resistance / upper half of band, RSI heated up
+            if boll_pct_b >= 0.60 and rsi >= 48:
+                trend_score -= 0.40  # Premium relief bounce short!
+            if boll_pct_b >= 0.80 or rsi >= 65:
+                trend_score -= 0.25  # Overbought squeeze short opportunity
+            if vwap_pct >= -0.05:
+                trend_score -= 0.15  # Selling near or above fair value VWAP
+            if macd_cross == "BEARISH_CROSS" and rsi >= 45:
+                trend_score -= 0.15  # Fresh downward turn off resistance
+
+        else:
+            # Range-Bound Mean Reversion
+            if boll_pct_b < 0.20 or rsi < 32:
+                trend_score += 0.40  # Range support bounce
+            elif boll_pct_b > 0.80 or rsi > 68:
+                trend_score -= 0.40  # Range resistance fade
+
+        # 4. Funding rate edge
         funding = deriv.get("funding_rate_8h", 0.0)
         if funding < -0.0001:
-            trend_score += 0.08  # Negative funding: shorts pay longs (bullish squeeze potential)
+            trend_score += 0.08  # Negative funding: shorts pay longs (squeeze potential)
         elif funding > 0.0003:
-            trend_score -= 0.08  # Crowded long funding cost
+            trend_score -= 0.08  # Crowded longs paying heavy funding
 
         # Normalize score into [-1.0, 1.0]
         s = max(-1.0, min(1.0, trend_score))
