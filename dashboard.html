@@ -1,0 +1,3478 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <base href="/">
+  <title>AI Trader - Jev BTC Perpetual Desk</title>
+  <script src="/static/lightweight-charts.js"></script>
+  <script>
+    if (typeof LightweightCharts === 'undefined') {
+      document.write('<script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"><\/script>');
+    }
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    :root {
+      --bg-darkest: #060709;
+      --bg-panel: #090a0d;
+      --border-subtle: #14161d;
+      --border-hover: #222632;
+      --text-main: #f3f4f6;
+      --text-muted: #6b7280;
+      --text-dim: #4b5563;
+      --green-accent: #22c55e;
+      --green-dim: #15803d;
+      --red-accent: #ef4444;
+      --red-dim: #b91c1c;
+      --blue-accent: #3b82f6;
+      --gold-accent: #eab308;
+      --slate-accent: #94a3b8;
+    }
+
+    body {
+      background-color: var(--bg-darkest);
+      color: var(--text-main);
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      height: 100vh;
+      width: 100vw;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      user-select: none;
+    }
+
+    .views-wrapper {
+      flex: 1;
+      width: 100vw;
+      height: calc(100vh - 48px);
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* Main 2-Column App Grid (Trading Terminal View) */
+    .app-container {
+      display: flex;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+    }
+
+    /* Left Column: Candlestick, Volume, Timeline & Equity */
+    .main-column {
+      flex: 1;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      border-right: 1px solid var(--border-subtle);
+      overflow: hidden;
+      background: var(--bg-darkest);
+    }
+
+    /* Clean Minimal Chart Header (1:1 with Abol Demo) */
+    .chart-header {
+      padding: 12px 1.25rem 8px 1.25rem;
+      background: var(--bg-darkest);
+      border-bottom: 1px solid var(--border-subtle);
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .chart-header-row1 {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      width: 100%;
+    }
+
+    .symbol-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* Dropdown Selector Styles (Same Dark Theme) */
+    .market-dropdown-wrap {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+    }
+
+    .symbol-dropdown-btn {
+      background: transparent;
+      border: 1px solid transparent;
+      border-radius: 6px;
+      padding: 3px 7px 3px 4px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      color: #ffffff;
+      transition: all 0.15s ease;
+    }
+
+    .symbol-dropdown-btn:hover {
+      background: #12151f;
+      border-color: #1e2230;
+    }
+
+    .dropdown-chevron {
+      color: #64748b;
+      transition: transform 0.2s ease, color 0.15s ease;
+    }
+
+    .symbol-dropdown-btn:hover .dropdown-chevron,
+    .symbol-dropdown-btn.open .dropdown-chevron {
+      color: #94a3b8;
+    }
+
+    .symbol-dropdown-btn.open .dropdown-chevron {
+      transform: rotate(180deg);
+    }
+
+    .market-popover {
+      position: absolute;
+      top: calc(100% + 8px);
+      left: 0;
+      z-index: 9999;
+      width: 340px;
+      max-height: 460px;
+      background: #090b10;
+      border: 1px solid #1c202d;
+      border-radius: 8px;
+      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.8), 0 0 1px rgba(255, 255, 255, 0.1);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      animation: popoverFadeIn 0.15s ease-out;
+    }
+
+    @keyframes popoverFadeIn {
+      from { opacity: 0; transform: translateY(-4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .popover-search-wrap {
+      padding: 10px 12px;
+      border-bottom: 1px solid #141722;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: #0d0f17;
+    }
+
+    .popover-search-wrap input {
+      flex: 1;
+      background: transparent;
+      border: none;
+      color: #ffffff;
+      font-family: 'Inter', -apple-system, sans-serif;
+      font-size: 12.5px;
+      outline: none;
+    }
+
+    .popover-search-wrap input::placeholder {
+      color: #475569;
+    }
+
+    .market-count-badge {
+      font-size: 10px;
+      color: #64748b;
+      font-family: 'JetBrains Mono', monospace;
+      background: #141722;
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+
+    .popover-tabs {
+      display: flex;
+      gap: 4px;
+      padding: 6px 12px;
+      background: #090b10;
+      border-bottom: 1px solid #141722;
+    }
+
+    .popover-tab {
+      background: transparent;
+      border: none;
+      color: #64748b;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 3px 8px;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .popover-tab:hover {
+      color: #ffffff;
+      background: #141722;
+    }
+
+    .popover-tab.active {
+      color: #ffffff;
+      background: #2563eb;
+    }
+
+    .popover-table-header {
+      display: flex;
+      justify-content: space-between;
+      padding: 6px 14px;
+      font-size: 10.5px;
+      color: #475569;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      border-bottom: 1px solid #12141d;
+    }
+
+    .market-items-list {
+      flex: 1;
+      overflow-y: auto;
+      max-height: 320px;
+      padding: 4px 0;
+    }
+
+    .market-items-list::-webkit-scrollbar {
+      width: 5px;
+    }
+    .market-items-list::-webkit-scrollbar-thumb {
+      background: #1f2433;
+      border-radius: 3px;
+    }
+
+    .market-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 7px 14px;
+      cursor: pointer;
+      transition: background 0.1s ease;
+      border-left: 2px solid transparent;
+    }
+
+    .market-row:hover {
+      background: #121520;
+    }
+
+    .market-row.active {
+      background: #131826;
+      border-left-color: #3b82f6;
+    }
+
+    .market-name-wrap {
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+    }
+
+    .market-name {
+      font-size: 12.5px;
+      font-weight: 700;
+      color: #f1f5f9;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .market-vol-badge {
+      font-size: 10px;
+      color: #64748b;
+      font-family: 'Inter', sans-serif;
+    }
+
+    .market-stats-wrap {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 1px;
+    }
+
+    .market-price {
+      font-size: 12.5px;
+      font-weight: 600;
+      font-family: 'JetBrains Mono', monospace;
+      color: #e2e8f0;
+    }
+
+    .market-change-badge {
+      font-size: 10.5px;
+      font-weight: 600;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .market-loading, .market-empty {
+      padding: 24px;
+      text-align: center;
+      font-size: 12px;
+      color: #64748b;
+    }
+
+    .symbol-pill {
+      font-weight: 700;
+      color: #ffffff;
+      font-size: 15px;
+      letter-spacing: 0.2px;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+
+    .timeframe-badge {
+      background: #191c26;
+      color: #64748b;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    .exchange-tag {
+      font-size: 13px;
+      color: #475569;
+      font-weight: 500;
+      font-family: 'Inter', sans-serif;
+    }
+
+    .ohlc-ticker {
+      display: flex;
+      gap: 12px;
+      font-size: 12px;
+      font-family: 'JetBrains Mono', monospace;
+      color: #ef4444;
+      transition: color 0.15s ease;
+    }
+
+    .ohlc-val {
+      font-weight: 500;
+    }
+
+    .ohlc-chg {
+      font-weight: 600;
+    }
+
+    /* Chart Containers */
+    .chart-pane {
+      flex: 1;
+      width: 100%;
+      min-height: 280px;
+      position: relative;
+    }
+
+    /* Playback & Speed Bar */
+    .playback-bar {
+      height: 50px;
+      min-height: 50px;
+      background: var(--bg-panel);
+      border-top: 1px solid var(--border-subtle);
+      border-bottom: 1px solid var(--border-subtle);
+      display: flex;
+      align-items: center;
+      padding: 0 1.25rem;
+      gap: 12px;
+    }
+
+    .btn-play {
+      background: #2563eb;
+      color: #ffffff;
+      border: none;
+      border-radius: 6px;
+      padding: 6px 14px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: background 0.15s ease;
+    }
+
+    .btn-play:hover {
+      background: #1d4ed8;
+    }
+
+    .btn-play.paused {
+      background: #334155;
+      color: #94a3b8;
+    }
+
+    .speed-btn-group {
+      display: flex;
+      background: #111319;
+      border: 1px solid #1c202a;
+      border-radius: 5px;
+      overflow: hidden;
+    }
+
+    .speed-pill {
+      background: transparent;
+      color: #9ca3af;
+      border: none;
+      padding: 5px 11px;
+      font-size: 11px;
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .speed-pill:hover {
+      color: #ffffff;
+      background: #181b24;
+    }
+
+    .speed-pill.active {
+      background: #2563eb;
+      color: #ffffff;
+    }
+
+    .scrubber-track {
+      flex: 1;
+      height: 5px;
+      background: #151821;
+      border-radius: 3px;
+      position: relative;
+      cursor: pointer;
+      overflow: hidden;
+    }
+
+    .scrubber-fill {
+      height: 100%;
+      background: #3b82f6;
+      width: 78%;
+      border-radius: 3px;
+    }
+
+    .timestamp-display {
+      font-size: 12px;
+      color: var(--text-muted);
+      font-family: 'JetBrains Mono', monospace;
+      white-space: nowrap;
+    }
+
+    /* Equity Graph Pane */
+    .equity-pane-wrapper {
+      height: 220px;
+      min-height: 200px;
+      background: var(--bg-darkest);
+      display: flex;
+      flex-direction: column;
+      position: relative;
+    }
+
+    .equity-header {
+      position: absolute;
+      top: 10px;
+      left: 18px;
+      z-index: 10;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 1px;
+      color: var(--text-muted);
+    }
+
+    #equity-chart {
+      flex: 1;
+      width: 100%;
+      height: 100%;
+    }
+
+    /* Right Column: JEV Sidebar */
+    .sidebar-column {
+      width: 360px;
+      min-width: 340px;
+      max-width: 400px;
+      height: 100%;
+      background: var(--bg-panel);
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+      padding: 1.25rem 1.4rem;
+      gap: 1.25rem;
+    }
+
+    .sidebar-column::-webkit-scrollbar {
+      width: 4px;
+    }
+
+    .sidebar-column::-webkit-scrollbar-thumb {
+      background: #1f2430;
+      border-radius: 2px;
+    }
+
+    .sidebar-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+    }
+
+    .brand-title {
+      font-weight: 900;
+      font-size: 1.15rem;
+      letter-spacing: 1px;
+      color: #60a5fa;
+    }
+
+    .brand-version {
+      font-size: 11px;
+      color: var(--text-dim);
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .sidebar-label {
+      font-size: 10.5px;
+      font-weight: 700;
+      letter-spacing: 0.6px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      margin-bottom: 4px;
+    }
+
+    /* Account Section */
+    .account-num {
+      font-size: 2.1rem;
+      font-weight: 800;
+      color: #ffffff;
+      letter-spacing: -0.5px;
+      line-height: 1.15;
+    }
+
+    .account-sub {
+      font-size: 13px;
+      font-weight: 700;
+      margin-top: 3px;
+    }
+
+    /* Position Section */
+    .position-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      margin-top: 4px;
+    }
+
+    .position-badge {
+      font-size: 1.95rem;
+      font-weight: 900;
+      letter-spacing: 0.5px;
+      line-height: 1;
+    }
+
+    .position-badge.short {
+      color: var(--red-accent);
+    }
+
+    .position-badge.long {
+      color: var(--green-accent);
+    }
+
+    .position-badge.wait {
+      color: var(--text-muted);
+      font-size: 1.6rem;
+    }
+
+    .position-details {
+      text-align: right;
+    }
+
+    .entry-txt {
+      font-size: 12.5px;
+      color: #cbd5e1;
+    }
+
+    .meta-txt {
+      font-size: 12px;
+      font-weight: 600;
+      margin-top: 2px;
+    }
+
+    /* Probability Distribution */
+    .prob-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-top: 6px;
+      font-size: 11.5px;
+    }
+
+    .prob-name {
+      width: 48px;
+      color: #cbd5e1;
+      font-weight: 600;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+    }
+
+    .prob-track {
+      flex: 1;
+      height: 10px;
+      background: #151821;
+      border-radius: 2px;
+      overflow: hidden;
+    }
+
+    .prob-fill {
+      height: 100%;
+      border-radius: 2px;
+      transition: width 0.3s ease;
+    }
+
+    .prob-val {
+      width: 32px;
+      text-align: right;
+      color: #94a3b8;
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    /* Directional Lean Bar */
+    .lean-container {
+      height: 14px;
+      background: #151821;
+      border-radius: 2px;
+      position: relative;
+      margin: 8px 0 6px 0;
+      overflow: hidden;
+      display: flex;
+    }
+
+    .lean-half {
+      width: 50%;
+      height: 100%;
+      position: relative;
+      display: flex;
+    }
+
+    .lean-half-left {
+      justify-content: flex-end;
+    }
+
+    .lean-half-right {
+      justify-content: flex-start;
+    }
+
+    .lean-center-divider {
+      position: absolute;
+      left: 50%;
+      top: 0;
+      bottom: 0;
+      width: 2px;
+      background: #2a2e3d;
+      transform: translateX(-50%);
+      z-index: 5;
+    }
+
+    .lean-fill-left {
+      height: 100%;
+      background: #f43f5e;
+      border-radius: 2px 0 0 2px;
+      transition: width 0.3s ease;
+    }
+
+    .lean-fill-right {
+      height: 100%;
+      background: #3b82f6;
+      border-radius: 0 2px 2px 0;
+      transition: width 0.3s ease;
+    }
+
+    .lean-sub {
+      display: flex;
+      justify-content: space-between;
+      font-size: 11.5px;
+      color: var(--text-muted);
+    }
+
+    /* 2x2 Stats Matrix */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px 16px;
+      padding: 10px 0;
+      border-top: 1px solid var(--border-subtle);
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .stat-box {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .stat-num {
+      font-size: 1.45rem;
+      font-weight: 800;
+      color: #ffffff;
+      line-height: 1.1;
+    }
+
+    .stat-lbl {
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--text-muted);
+      letter-spacing: 0.5px;
+      margin-top: 2px;
+    }
+
+    /* Performance Table */
+    .perf-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 4px 0;
+      font-size: 12px;
+    }
+
+    .perf-key {
+      color: var(--text-muted);
+    }
+
+    .perf-val {
+      color: #cbd5e1;
+      font-weight: 600;
+    }
+
+    .perf-legend {
+      display: flex;
+      justify-content: space-between;
+      font-size: 11px;
+      margin-top: 14px;
+      padding-top: 10px;
+      border-top: 1px solid var(--border-subtle);
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* Volume label inside chart */
+    .vol-label {
+      position: absolute;
+      bottom: 60px;
+      left: 18px;
+      z-index: 5;
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--text-muted);
+      pointer-events: none;
+    }
+
+    /* Header action buttons */
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .btn-action-sm {
+      background: #151821;
+      border: 1px solid #242834;
+      color: #9ca3af;
+      border-radius: 4px;
+      padding: 4px 8px;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .btn-action-sm:hover {
+      color: #ffffff;
+      background: #1f2430;
+    }
+
+    /* Top Global Navigation Bar */
+    .top-nav-bar {
+      height: 48px;
+      background: #08090d;
+      border-bottom: 1px solid var(--border-subtle);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 18px;
+      flex-shrink: 0;
+      z-index: 50;
+    }
+
+    .nav-left {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+    }
+
+    .nav-brand {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 800;
+      letter-spacing: 0.5px;
+      font-size: 14px;
+      color: #ffffff;
+    }
+
+    .brand-tag-mini {
+      font-size: 10px;
+      font-weight: 800;
+      background: #1e293b;
+      color: #38bdf8;
+      padding: 2px 6px;
+      border-radius: 4px;
+      border: 1px solid #334155;
+    }
+
+    .live-dot-pulse {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #22c55e;
+      box-shadow: 0 0 8px #22c55e;
+      animation: pulse-dot 1.8s infinite;
+    }
+
+    @keyframes pulse-dot {
+      0% { transform: scale(0.95); opacity: 0.8; }
+      50% { transform: scale(1.15); opacity: 1; box-shadow: 0 0 12px #22c55e; }
+      100% { transform: scale(0.95); opacity: 0.8; }
+    }
+
+    .nav-tabs {
+      display: flex;
+      align-items: center;
+      background: #0f121a;
+      padding: 3px;
+      border-radius: 6px;
+      border: 1px solid #1a1f2c;
+      gap: 4px;
+    }
+
+    .nav-tab-btn {
+      background: transparent;
+      border: none;
+      color: #94a3b8;
+      padding: 5px 13px;
+      font-size: 12px;
+      font-weight: 600;
+      border-radius: 4px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      transition: all 0.15s ease;
+    }
+
+    .nav-tab-btn:hover {
+      color: #ffffff;
+      background: #191e2b;
+    }
+
+    .nav-tab-btn.active {
+      background: #2563eb;
+      color: #ffffff;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+    }
+
+    .nav-right {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .nav-kpi-pill {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      padding: 0 8px;
+      border-right: 1px solid #1a1e2a;
+    }
+
+    .nav-kpi-pill:last-child {
+      border-right: none;
+    }
+
+    .kpi-lbl {
+      font-size: 9px;
+      color: #64748b;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+    }
+
+    .kpi-val {
+      font-size: 12px;
+      font-weight: 700;
+      color: #f8fafc;
+    }
+
+    .live-badge-stream {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      background: rgba(34, 197, 94, 0.1);
+      border: 1px solid rgba(34, 197, 94, 0.25);
+      color: #22c55e;
+      font-size: 10px;
+      font-weight: 800;
+      padding: 3px 8px;
+      border-radius: 4px;
+      letter-spacing: 0.5px;
+    }
+
+    /* Master & History Overview Screen Layouts */
+    #master-view, #history-view {
+      width: 100%;
+      height: 100%;
+      max-height: 100%;
+      overflow-y: auto;
+      overflow-x: hidden;
+      padding: 22px 28px;
+      background: var(--bg-darkest);
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      box-sizing: border-box;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    #master-view::-webkit-scrollbar, #history-view::-webkit-scrollbar {
+      width: 6px;
+    }
+    #master-view::-webkit-scrollbar-thumb, #history-view::-webkit-scrollbar-thumb {
+      background: #1c2130;
+      border-radius: 3px;
+    }
+
+    /* KPI Cards Grid */
+    .master-kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+      gap: 14px;
+    }
+
+    .kpi-card {
+      background: #090c13;
+      border: 1px solid #141824;
+      border-radius: 8px;
+      padding: 16px 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      transition: border-color 0.15s;
+    }
+
+    .kpi-card:hover {
+      border-color: #22293d;
+    }
+
+    .kpi-card-label {
+      font-size: 10.5px;
+      font-weight: 700;
+      color: #64748b;
+      letter-spacing: 0.5px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .kpi-card-value {
+      font-size: 1.5rem;
+      font-weight: 800;
+      color: #ffffff;
+      line-height: 1.15;
+    }
+
+    .kpi-card-sub {
+      font-size: 11px;
+      color: #94a3b8;
+    }
+
+    .margin-bar-wrap {
+      height: 5px;
+      background: #151824;
+      border-radius: 3px;
+      overflow: hidden;
+      margin-top: 4px;
+    }
+
+    .margin-bar-fill {
+      height: 100%;
+      background: #3b82f6;
+      border-radius: 3px;
+      transition: width 0.3s ease;
+    }
+
+    /* Master Markets Table Area */
+    .master-table-section {
+      background: #090c13;
+      border: 1px solid #141824;
+      border-radius: 8px;
+      padding: 18px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .master-table-toolbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    .master-filter-tabs {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    .m-tab-btn {
+      background: #101420;
+      border: 1px solid #1a2030;
+      color: #94a3b8;
+      padding: 6px 14px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .m-tab-btn:hover {
+      background: #171d2e;
+      color: #ffffff;
+      border-color: #263047;
+    }
+
+    .m-tab-btn.active {
+      background: #1e3a8a;
+      color: #ffffff;
+      border-color: #3b82f6;
+    }
+
+    .master-search-wrap {
+      position: relative;
+      width: 280px;
+      max-width: 100%;
+    }
+
+    .master-search-wrap input {
+      width: 100%;
+      background: #0d111a;
+      border: 1px solid #1a2030;
+      border-radius: 6px;
+      padding: 7px 12px 7px 32px;
+      color: #ffffff;
+      font-size: 12px;
+      outline: none;
+      font-family: inherit;
+      transition: border-color 0.15s;
+    }
+
+    .master-search-wrap input:focus {
+      border-color: #3b82f6;
+    }
+
+    .master-search-icon {
+      position: absolute;
+      left: 10px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: #64748b;
+      pointer-events: none;
+    }
+
+    /* Master Table Styling */
+    .master-table-wrap {
+      overflow-x: auto;
+    }
+
+    .master-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+      text-align: left;
+    }
+
+    .master-table th {
+      padding: 10px 12px;
+      color: #64748b;
+      font-weight: 700;
+      font-size: 10.5px;
+      letter-spacing: 0.5px;
+      border-bottom: 1px solid #161b28;
+      white-space: nowrap;
+      position: sticky;
+      top: 0;
+      background: #090c13;
+      z-index: 10;
+    }
+
+    .master-table td {
+      padding: 12px;
+      border-bottom: 1px solid #11141e;
+      white-space: nowrap;
+      vertical-align: middle;
+    }
+
+    .master-table-row {
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s;
+    }
+
+    .master-table-row:hover {
+      background: #101420;
+    }
+
+    .master-table-row.has-pos {
+      background: rgba(37, 99, 235, 0.04);
+    }
+
+    .master-table-row.has-pos:hover {
+      background: rgba(37, 99, 235, 0.08);
+    }
+
+    /* Position Badges */
+    .pos-badge-long {
+      background: rgba(34, 197, 94, 0.15);
+      color: #4ade80;
+      border: 1px solid rgba(34, 197, 94, 0.3);
+      padding: 3px 7px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 700;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .pos-badge-short {
+      background: rgba(239, 68, 68, 0.15);
+      color: #f87171;
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      padding: 3px 7px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 700;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .pos-badge-flat {
+      color: #64748b;
+      font-size: 11px;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* Open Chart Button */
+    .btn-open-chart {
+      background: #171d2b;
+      border: 1px solid #232b3e;
+      color: #93c5fd;
+      padding: 5px 10px;
+      border-radius: 5px;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      transition: all 0.15s;
+    }
+
+    .btn-open-chart:hover {
+      background: #2563eb;
+      border-color: #3b82f6;
+      color: #ffffff;
+    }
+
+    /* Back to Overview button in Terminal */
+    .btn-back-master {
+      background: #121622;
+      border: 1px solid #1c2232;
+      color: #94a3b8;
+      padding: 4px 10px;
+      border-radius: 5px;
+      font-size: 11.5px;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      transition: all 0.15s;
+    }
+
+    .btn-back-master:hover {
+      background: #1c2336;
+      border-color: #2c3650;
+      color: #ffffff;
+    }
+
+    /* Master Table Enhanced Info Styles */
+    .btn-reset-master {
+      background: rgba(239, 68, 68, 0.12);
+      border: 1px solid rgba(239, 68, 68, 0.35);
+      color: #f87171;
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 700;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      transition: all 0.15s;
+      white-space: nowrap;
+    }
+    .btn-reset-master:hover {
+      background: #ef4444;
+      color: #ffffff;
+      border-color: #ef4444;
+    }
+    .jev-lean-badge {
+      display: inline-block;
+      font-size: 9.5px;
+      font-family: 'JetBrains Mono', monospace;
+      padding: 1px 5px;
+      border-radius: 3px;
+      font-weight: 700;
+      margin-top: 3px;
+    }
+    .jev-lean-bull {
+      background: rgba(34, 197, 94, 0.15);
+      color: #4ade80;
+      border: 1px solid rgba(34, 197, 94, 0.25);
+    }
+    .jev-lean-bear {
+      background: rgba(239, 68, 68, 0.15);
+      color: #f87171;
+      border: 1px solid rgba(239, 68, 68, 0.25);
+    }
+    .jev-lean-neutral {
+      background: #151924;
+      color: #94a3b8;
+      border: 1px solid #23293a;
+    }
+    .regime-pill {
+      font-size: 9px;
+      color: #64748b;
+      letter-spacing: 0.4px;
+      text-transform: uppercase;
+      font-weight: 700;
+      display: block;
+      margin-top: 2px;
+    }
+    .btn-history-master {
+      background: #1e1b4b;
+      border: 1px solid #4338ca;
+      color: #c7d2fe;
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 11.5px;
+      font-weight: 700;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.15s;
+    }
+    .btn-history-master:hover {
+      background: #312e81;
+      color: #ffffff;
+      border-color: #6366f1;
+    }
+    .btn-refresh-history {
+      background: #171d2b;
+      border: 1px solid #232b3e;
+      color: #93c5fd;
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 11.5px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .btn-refresh-history:hover {
+      background: #1e293b;
+      color: #ffffff;
+      border-color: #3b82f6;
+    }
+    .contracts-count-badge {
+      font-size: 11px;
+      font-weight: 700;
+      color: #38bdf8;
+      background: rgba(56, 189, 248, 0.1);
+      border: 1px solid rgba(56, 189, 248, 0.25);
+      padding: 4px 8px;
+      border-radius: 5px;
+      font-family: 'JetBrains Mono', monospace;
+      white-space: nowrap;
+    }
+    .trade-pill-win {
+      color: #4ade80;
+      font-weight: 800;
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .trade-pill-loss {
+      color: #f87171;
+      font-weight: 800;
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .trade-pill-open {
+      color: #38bdf8;
+      font-weight: 800;
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .duration-pill {
+      font-size: 10px;
+      color: #94a3b8;
+      background: #131722;
+      border: 1px solid #1f2536;
+      padding: 1px 5px;
+      border-radius: 3px;
+      font-family: 'JetBrains Mono', monospace;
+      display: inline-block;
+      margin-top: 2px;
+    }
+
+    /* Jev Analysis Queue & Tracking Styles */
+    .btn-track-add {
+      background: rgba(56, 189, 248, 0.08);
+      border: 1px solid rgba(56, 189, 248, 0.35);
+      color: #38bdf8;
+      padding: 4px 10px;
+      border-radius: 5px;
+      font-size: 11px;
+      font-weight: 700;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      transition: all 0.15s ease;
+      white-space: nowrap;
+    }
+    .btn-track-add:hover {
+      background: #0284c7;
+      border-color: #38bdf8;
+      color: #ffffff;
+      box-shadow: 0 0 10px rgba(56, 189, 248, 0.35);
+    }
+    .btn-track-active {
+      background: rgba(34, 197, 94, 0.15);
+      border: 1px solid rgba(34, 197, 94, 0.45);
+      color: #4ade80;
+      padding: 4px 10px;
+      border-radius: 5px;
+      font-size: 11px;
+      font-weight: 700;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.15s ease;
+      white-space: nowrap;
+    }
+    .btn-track-active:hover {
+      background: rgba(239, 68, 68, 0.18);
+      border-color: rgba(239, 68, 68, 0.5);
+      color: #f87171;
+    }
+    .pulse-dot-green {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #22c55e;
+      box-shadow: 0 0 6px #22c55e;
+      display: inline-block;
+      animation: pulse-dot 1.5s infinite;
+    }
+    .remove-cross {
+      font-weight: 900;
+      font-size: 12px;
+      margin-left: 2px;
+      opacity: 0.7;
+    }
+    .btn-track-active:hover .remove-cross {
+      opacity: 1;
+      color: #ef4444;
+    }
+    .btn-track-terminal {
+      background: rgba(56, 189, 248, 0.1);
+      border: 1px solid rgba(56, 189, 248, 0.35);
+      color: #38bdf8;
+      padding: 5px 12px;
+      border-radius: 6px;
+      font-size: 11.5px;
+      font-weight: 700;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.15s;
+    }
+    .btn-track-terminal:hover {
+      background: #0284c7;
+      color: #ffffff;
+      border-color: #38bdf8;
+    }
+    .btn-track-terminal.active {
+      background: rgba(34, 197, 94, 0.15);
+      border-color: rgba(34, 197, 94, 0.4);
+      color: #4ade80;
+    }
+    .btn-track-terminal.active:hover {
+      background: rgba(239, 68, 68, 0.18);
+      border-color: rgba(239, 68, 68, 0.5);
+      color: #f87171;
+    }
+    .jev-standby-banner {
+      background: rgba(15, 23, 42, 0.65);
+      border: 1px solid rgba(56, 189, 248, 0.25);
+      border-radius: 8px;
+      padding: 12px 16px;
+      margin-bottom: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Global Navigation Bar -->
+  <div class="top-nav-bar">
+    <div class="nav-left">
+      <div class="nav-brand">
+        <span class="live-dot-pulse"></span>
+        <span class="brand-text">JEV <span class="brand-tag-mini">2.0</span></span>
+      </div>
+      <div class="nav-tabs">
+        <button class="nav-tab-btn active" id="tab-master" onclick="switchView('master', true, null, 'HOME')">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+          Master Portfolio &amp; Markets
+        </button>
+        <button class="nav-tab-btn" id="tab-terminal" onclick="switchView('terminal')">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
+          Trading Terminal (<span id="nav-terminal-sym">BTCUSDT</span>)
+        </button>
+        <button class="nav-tab-btn" id="tab-history" onclick="switchView('history')">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+          Trade History (<span id="nav-trade-history-count">0</span>)
+        </button>
+      </div>
+    </div>
+    <div class="nav-right">
+      <div class="nav-kpi-pill">
+        <span class="kpi-lbl">JEV AI QUEUE</span>
+        <span class="kpi-val mono" id="nav-tracked-count" style="color: #38bdf8;">0 Contracts</span>
+      </div>
+      <div class="nav-kpi-pill">
+        <span class="kpi-lbl">PORTFOLIO BASELINE</span>
+        <span class="kpi-val mono" id="nav-total-equity">$10,000.00 / market</span>
+      </div>
+      <div class="nav-kpi-pill">
+        <span class="kpi-lbl">ACTIVE POSITIONS</span>
+        <span class="kpi-val mono" id="nav-active-pos-count">0 Open</span>
+      </div>
+      <div class="nav-kpi-pill">
+        <span class="kpi-lbl">EXCHANGE</span>
+        <span class="kpi-val mono" style="color: #60a5fa;">Binance Futures (REST)</span>
+      </div>
+      <span class="live-badge-stream"><span class="pulse-green"></span> LIVE</span>
+    </div>
+  </div>
+
+  <div class="views-wrapper">
+    <!-- View 1: Master Portfolio & Multi-Stock PnL Dashboard -->
+    <div id="master-view">
+      <!-- 1. Top KPI Summary Grid -->
+      <div class="master-kpi-grid">
+        <div class="kpi-card">
+          <div class="kpi-card-label">ISOLATED CONTRACT BALANCE</div>
+          <div class="kpi-card-value mono" id="m-kpi-equity">$10,000.00</div>
+          <div class="kpi-card-sub mono" id="m-kpi-pnl">Isolated $10,000.00 per contract</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-card-label">TOTAL UNREALIZED PnL</div>
+          <div class="kpi-card-value mono" id="m-kpi-unrealized">$0.00</div>
+          <div class="kpi-card-sub mono" id="m-kpi-unrealized-sub">Across 0 open position(s)</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-card-label">TOTAL REALIZED PnL</div>
+          <div class="kpi-card-value mono" id="m-kpi-realized">$0.00</div>
+          <div class="kpi-card-sub mono" id="m-kpi-realized-sub">0 closed trades • 0% Win Rate</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-card-label">MARGIN UTILIZATION</div>
+          <div class="kpi-card-value mono" id="m-kpi-margin">0.0%</div>
+          <div class="margin-bar-wrap">
+            <div class="margin-bar-fill" id="m-kpi-margin-bar" style="width: 0%;"></div>
+          </div>
+          <div class="kpi-card-sub mono" id="m-kpi-margin-pct" style="margin-top: 4px;">$0 / $10,000 per contract</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-card-label">ACTIVE CONTRACTS</div>
+          <div class="kpi-card-value mono" id="m-kpi-active-count">0 Open</div>
+          <div class="kpi-card-sub mono" id="m-kpi-fees-sub">Fees: $0.00 • 725 Monitored</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-card-label">24h VOLUME LEADER</div>
+          <div class="kpi-card-value mono" id="m-kpi-leader-sym" style="font-size: 1.25rem;">BTCUSDT</div>
+          <div class="kpi-card-sub mono" id="m-kpi-leader-vol">$17.7B 24h Vol • +5.7%</div>
+        </div>
+      </div>
+
+      <!-- 2. Master Markets & PnL Table Section -->
+      <div class="master-table-section">
+        <div class="master-table-toolbar">
+          <div class="master-filter-tabs">
+            <button class="m-tab-btn" data-filter="TRACKED" onclick="setMasterFilter('TRACKED')">🔬 Jev Queue (<span id="m-filter-tracked-count">0</span>)</button>
+            <button class="m-tab-btn" data-filter="ACTIVE" onclick="setMasterFilter('ACTIVE')">⚡ Active Positions (<span id="m-filter-active-count">0</span>)</button>
+            <button class="m-tab-btn active" data-filter="ALL" onclick="setMasterFilter('ALL')">🌐 All Contracts (<span id="m-tab-all-count">725+</span>)</button>
+            <button class="m-tab-btn" data-filter="GAINERS" onclick="setMasterFilter('GAINERS')">🟢 Top Gainers</button>
+            <button class="m-tab-btn" data-filter="LOSERS" onclick="setMasterFilter('LOSERS')">🔴 Top Losers</button>
+          </div>
+          <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+            <button class="btn-history-master" onclick="switchView('history')" title="View complete trade history across all markets">
+              📜 Trade History (<span id="m-quick-trades-count">0</span>)
+            </button>
+            <button class="btn-reset-master" onclick="confirmResetAllMarkets()" title="Reset all market positions and start fresh with $10,000 for each market">
+              🔄 Reset All ($10k Each)
+            </button>
+            <span class="contracts-count-badge" id="m-contracts-count-badge">Loading...</span>
+            <div class="master-search-wrap">
+              <svg class="master-search-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><path d="M21 21l-4.35-4.35"></path></svg>
+              <input type="text" id="master-search-input" placeholder="Search market (e.g. BTC, ETH, SOL, DOGE)..." oninput="handleMasterSearchInput(this.value)" autocomplete="off">
+            </div>
+          </div>
+        </div>
+
+        <!-- Jev Standby Callout Banner when no contracts are analyzed -->
+        <div id="jev-standby-banner" class="jev-standby-banner" style="display: none;">
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <div class="pulse-dot-green" style="background: #38bdf8; box-shadow: 0 0 8px #38bdf8; width: 9px; height: 9px;"></div>
+            <div>
+              <div style="font-weight: 700; color: #f8fafc; font-size: 13px;">Jev AI Standby — 0 Contracts in Analysis Queue</div>
+              <div style="font-size: 11.5px; color: #94a3b8; margin-top: 2px;">
+                By default, Jev does not analyze or trade any contract. Click the <span class="mono" style="color: #38bdf8; font-weight: 700; background: #0f172a; padding: 2px 7px; border-radius: 4px; border: 1px solid #1e293b;">+ Analyze</span> button on any contract below to initiate complete quantitative analysis and enable autonomous trading.
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="master-table-wrap">
+          <table class="master-table">
+            <thead>
+              <tr>
+                <th style="width: 140px;">Contract</th>
+                <th style="width: 120px; text-align: center;">Jev AI Analysis</th>
+                <th style="width: 160px;">Account Capital ($10k base)</th>
+                <th style="width: 140px;">Mark Price &amp; Range</th>
+                <th style="width: 110px;">24h Change / Vol</th>
+                <th style="width: 100px;">Position</th>
+                <th style="width: 120px;">Size / Notional</th>
+                <th style="width: 120px;">Entry / Liq Price</th>
+                <th style="width: 130px;">Unrealized PnL</th>
+                <th style="width: 110px;">Realized PnL</th>
+                <th style="width: 170px;">Jev AI Stance &amp; Lean</th>
+                <th style="width: 90px; text-align: right;">Action</th>
+              </tr>
+            </thead>
+            <tbody id="master-table-body">
+              <tr>
+                <td colspan="12" style="text-align: center; padding: 30px; color: #64748b;">
+                  Loading Binance USDT-M Perpetual Markets &amp; Positions...
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- View 3: Complete Trade History & Execution Metrics -->
+    <div id="history-view" style="display: none;">
+      <!-- 1. Top KPI Summary Grid for Trade History -->
+      <div class="master-kpi-grid">
+        <div class="kpi-card">
+          <div class="kpi-card-label">TOTAL CLOSED TRADES</div>
+          <div class="kpi-card-value mono" id="h-kpi-total-trades">0</div>
+          <div class="kpi-card-sub mono" id="h-kpi-open-trades">0 Active Position(s)</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-card-label">WIN RATE &amp; RECORD</div>
+          <div class="kpi-card-value mono" id="h-kpi-win-rate">0.0%</div>
+          <div class="kpi-card-sub mono" id="h-kpi-wl-record">0W / 0L</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-card-label">TOTAL REALIZED PnL</div>
+          <div class="kpi-card-value mono" id="h-kpi-realized-pnl">$0.00</div>
+          <div class="kpi-card-sub mono" id="h-kpi-realized-sub">Across closed round-trips</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-card-label">PROFIT FACTOR</div>
+          <div class="kpi-card-value mono" id="h-kpi-profit-factor">0.00</div>
+          <div class="kpi-card-sub mono" id="h-kpi-pf-sub">Gross Wins / Gross Losses</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-card-label">TOTAL EXCHANGE FEES</div>
+          <div class="kpi-card-value mono" id="h-kpi-fees-paid">$0.00</div>
+          <div class="kpi-card-sub mono">5 bps taker fee per execution</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-card-label">STOPPED OUT COUNT</div>
+          <div class="kpi-card-value mono" id="h-kpi-stopped-out">0</div>
+          <div class="kpi-card-sub mono">Protective risk stops triggered</div>
+        </div>
+      </div>
+
+      <!-- 2. Trade History Table Section -->
+      <div class="master-table-section">
+        <div class="master-table-toolbar">
+          <div class="master-filter-tabs">
+            <button class="m-tab-btn active" data-hfilter="ALL" onclick="setHistoryFilter('ALL')">📜 All Trades (<span id="h-filter-all-count">0</span>)</button>
+            <button class="m-tab-btn" data-hfilter="WINS" onclick="setHistoryFilter('WINS')">🟢 Profitable Wins (<span id="h-filter-wins-count">0</span>)</button>
+            <button class="m-tab-btn" data-hfilter="LOSSES" onclick="setHistoryFilter('LOSSES')">🔴 Losses (<span id="h-filter-losses-count">0</span>)</button>
+            <button class="m-tab-btn" data-hfilter="OPEN" onclick="setHistoryFilter('OPEN')">⚡ Open Positions (<span id="h-filter-open-count">0</span>)</button>
+          </div>
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <div class="master-search-wrap">
+              <svg class="master-search-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><path d="M21 21l-4.35-4.35"></path></svg>
+              <input type="text" id="history-search-input" placeholder="Filter by symbol (e.g. BTC, SOL)..." oninput="handleHistorySearchInput(this.value)" autocomplete="off">
+            </div>
+            <button class="btn-refresh-history" onclick="fetchTradeHistory(true)" title="Refresh Trade History">
+              ↻ Refresh
+            </button>
+          </div>
+        </div>
+
+        <div class="master-table-wrap">
+          <table class="master-table">
+            <thead>
+              <tr>
+                <th style="width: 140px;">Trade ID &amp; Time</th>
+                <th style="width: 130px;">Contract &amp; Side</th>
+                <th style="width: 120px;">Size &amp; Notional</th>
+                <th style="width: 130px;">Entry Price</th>
+                <th style="width: 130px;">Exit Price</th>
+                <th style="width: 110px;">Margin (Lev)</th>
+                <th style="width: 100px;">Fees Paid</th>
+                <th style="width: 140px;">Realized Net PnL</th>
+                <th style="width: 100px;">Duration</th>
+                <th style="width: 180px;">Exit Reason / Trigger</th>
+                <th style="width: 90px; text-align: right;">Action</th>
+              </tr>
+            </thead>
+            <tbody id="history-table-body">
+              <tr>
+                <td colspan="11" style="text-align: center; padding: 30px; color: #64748b;">
+                  Loading trade history...
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- View 2: Single-Market Trading Terminal & Candlestick Graph -->
+    <div class="app-container" id="terminal-view" style="display: none;">
+      <!-- Left Column: Main Trading Desk -->
+      <div class="main-column">
+        <!-- Top Chart Bar: Clean 1:1 Minimal Header (Matching Abol Demo) -->
+        <div class="chart-header">
+          <div class="chart-header-row1">
+            <div class="symbol-group">
+              <button class="btn-back-master" onclick="switchView('master')" title="Back to Master Portfolio Overview">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                Master Overview
+              </button>
+              <div class="market-dropdown-wrap" id="market-dropdown-wrap">
+                <button class="symbol-dropdown-btn" id="symbol-dropdown-btn" onclick="toggleMarketDropdown(event)" title="Click to browse 700+ Binance Perpetual Markets">
+                  <span class="symbol-pill" id="active-symbol-text">BTCUSDT</span>
+                <svg class="dropdown-chevron" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
+              </button>
+              <!-- Market Popover Menu -->
+              <div class="market-popover" id="market-popover" style="display: none;" onclick="event.stopPropagation()">
+                <div class="popover-search-wrap">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+                  <input type="text" id="market-search" placeholder="Search 700+ Binance markets..." oninput="handleMarketSearch(this.value)" autocomplete="off">
+                  <span id="market-count-badge" class="market-count-badge">--</span>
+                </div>
+                <div class="popover-tabs">
+                  <button class="popover-tab active" data-cat="ALL" onclick="selectMarketCategory('ALL')">All</button>
+                  <button class="popover-tab" data-cat="TOP" onclick="selectMarketCategory('TOP')">Top 10</button>
+                  <button class="popover-tab" data-cat="L1" onclick="selectMarketCategory('L1')">L1 / L2</button>
+                  <button class="popover-tab" data-cat="DEFI" onclick="selectMarketCategory('DEFI')">DeFi</button>
+                  <button class="popover-tab" data-cat="MEME" onclick="selectMarketCategory('MEME')">Meme</button>
+                </div>
+                <div class="popover-table-header">
+                  <span>Market</span>
+                  <span style="text-align: right;">Price / 24h</span>
+                </div>
+                <div class="market-items-list" id="market-items-list">
+                  <div class="market-loading">Loading Binance USDT-M Futures...</div>
+                </div>
+              </div>
+            </div>
+            <button id="terminal-track-btn" class="btn-track-terminal" onclick="toggleTrackCurrentSymbol()" title="Add to Jev AI Analysis & Trading Queue">
+              <span class="plus-icon">+</span> Add to Jev Analysis
+            </button>
+            <span class="timeframe-badge">5m</span>
+          </div>
+          <span class="exchange-tag">Binance</span>
+        </div>
+        <div class="ohlc-ticker mono" id="ohlc-bar">
+          <span>O <span class="ohlc-val" id="ohlc-o">--</span></span>
+          <span>H <span class="ohlc-val" id="ohlc-h">--</span></span>
+          <span>L <span class="ohlc-val" id="ohlc-l">--</span></span>
+          <span>C <span class="ohlc-val" id="ohlc-c">--</span></span>
+          <span id="ohlc-chg" class="ohlc-chg">--</span>
+        </div>
+      </div>
+
+      <!-- Main Candlestick & Docked Volume Chart -->
+      <div class="chart-pane" id="tv-chart">
+        <div class="vol-label">Vol</div>
+      </div>
+
+      <!-- Autonomous Live Trading Operations Bar (Clear AI Evaluation Cadence) -->
+      <div class="playback-bar">
+        <button class="btn-play" id="btn-pause-toggle" onclick="togglePause()">
+          <span id="play-icon">❚❚</span> <span id="play-text">Pause Auto-Trade</span>
+        </button>
+
+        <div style="display: flex; align-items: center; gap: 8px; margin-left: 8px;">
+          <span style="font-size: 11px; color: var(--text-muted); font-weight: 700;">AI Cadence:</span>
+          <div class="speed-btn-group">
+            <button class="speed-pill active" id="spd-1" onclick="setSpeed(1)">Every 60s</button>
+            <button class="speed-pill" id="spd-2" onclick="setSpeed(2)">Every 30s</button>
+            <button class="speed-pill" id="spd-4" onclick="setSpeed(4)">Every 15s</button>
+          </div>
+        </div>
+
+        <div style="flex: 1; display: flex; flex-direction: column; gap: 3px; margin: 0 16px;">
+          <div style="display: flex; justify-content: space-between; font-size: 10.5px; color: var(--text-muted);">
+            <span id="cycle-countdown-label">Next Jev Autonomous Decision Cycle</span>
+            <span class="mono" id="cycle-countdown-sec" style="color: #60a5fa; font-weight: 700;">in 60s</span>
+          </div>
+          <div class="scrubber-track" id="timeline-scrubber">
+            <div class="scrubber-fill" id="scrubber-fill" style="width: 0%;"></div>
+          </div>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span style="font-size: 11px; color: #22c55e; display: flex; align-items: center; gap: 5px;" class="mono font-semibold">
+            <span style="width: 7px; height: 7px; background: #22c55e; border-radius: 50%; box-shadow: 0 0 6px #22c55e; display: inline-block;"></span>
+            LIVE FEED
+          </span>
+          <div class="timestamp-display" id="clock-timestamp">--:--:--</div>
+        </div>
+      </div>
+
+      <!-- Bottom Comparative Equity Curve -->
+      <div class="equity-pane-wrapper">
+        <div class="equity-header">EQUITY</div>
+        <div id="equity-chart"></div>
+      </div>
+    </div>
+
+    <!-- Right Sidebar: JEV AI System One Panel -->
+    <div class="sidebar-column">
+      <!-- Sidebar Title -->
+      <div class="sidebar-top">
+        <span class="brand-title">JEV</span>
+        <span class="brand-version" id="jev-version">jev-1.13.0</span>
+      </div>
+
+      <!-- 1. Account Section -->
+      <div>
+        <div class="sidebar-label">ACCOUNT</div>
+        <div class="account-num mono" id="account-equity">$10,000.00</div>
+        <div class="account-sub mono" id="account-change" style="color: var(--text-muted);">$0.00  +0.00%</div>
+      </div>
+
+      <!-- 2. Position Section (Set by Policy, Not Argmax) -->
+      <div>
+        <div class="sidebar-label">POSITION • SET BY POLICY, NOT ARGMAX</div>
+        <div class="position-row">
+          <div class="position-badge wait" id="position-side">WAIT</div>
+          <div class="position-details mono">
+            <div class="entry-txt" id="position-entry">entry --</div>
+            <div class="meta-txt" id="position-meta" style="color: var(--text-muted);">0.00% • 0m held</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 3. Probability Distribution -->
+      <div>
+        <div class="sidebar-label">PROBABILITY DISTRIBUTION</div>
+        <div class="prob-row">
+          <span class="prob-name">LONG</span>
+          <div class="prob-track"><div class="prob-fill" id="prob-bar-long" style="width: 0%; background: var(--green-accent);"></div></div>
+          <span class="mono prob-val" id="prob-pct-long">0%</span>
+        </div>
+        <div class="prob-row">
+          <span class="prob-name">WAIT</span>
+          <div class="prob-track"><div class="prob-fill" id="prob-bar-wait" style="width: 100%; background: #475569;"></div></div>
+          <span class="mono prob-val" id="prob-pct-wait">100%</span>
+        </div>
+        <div class="prob-row">
+          <span class="prob-name">SHORT</span>
+          <div class="prob-track"><div class="prob-fill" id="prob-bar-short" style="width: 0%; background: var(--red-accent);"></div></div>
+          <span class="mono prob-val" id="prob-pct-short">0%</span>
+        </div>
+      </div>
+
+      <!-- 4. Directional Lean Meter -->
+      <div>
+        <div class="sidebar-label">DIRECTIONAL LEAN • P(LONG) - P(SHORT)</div>
+        <div class="lean-container">
+          <div class="lean-center-divider"></div>
+          <div class="lean-half lean-half-left">
+            <div class="lean-fill-left" id="lean-bar-left" style="width: 0%;"></div>
+          </div>
+          <div class="lean-half lean-half-right">
+            <div class="lean-fill-right" id="lean-bar-right" style="width: 0%;"></div>
+          </div>
+        </div>
+        <div class="lean-sub">
+          <span>Jev's own pick: <strong id="lean-own-pick" style="color: #cbd5e1;">WAIT</strong></span>
+          <span class="mono" id="lean-stat-text">lean +0.00 • acts at ±0.08</span>
+        </div>
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border-subtle);">
+          <span style="font-size: 10px; font-weight: 700; color: var(--text-muted);">SENSITIVITY:</span>
+          <div class="speed-btn-group" style="scale: 0.95; transform-origin: right;">
+            <button class="speed-pill thresh-pill" id="thresh-03" onclick="setPolicyThreshold(0.03)" title="Active: acts at ±0.03 lean">±0.03 Active</button>
+            <button class="speed-pill thresh-pill active" id="thresh-08" onclick="setPolicyThreshold(0.08)" title="Balanced: acts at ±0.08 lean (Default)">±0.08 Bal</button>
+            <button class="speed-pill thresh-pill" id="thresh-15" onclick="setPolicyThreshold(0.15)" title="Strict: acts at ±0.15 lean">±0.15 Strict</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 5. 2x2 Stats Grid -->
+      <div class="stats-grid">
+        <div class="stat-box">
+          <div class="mono stat-num" id="stat-confidence">0%</div>
+          <div class="stat-lbl">CONFIDENCE</div>
+        </div>
+        <div class="stat-box">
+          <div class="mono stat-num" id="stat-latency">--ms</div>
+          <div class="stat-lbl">LATENCY</div>
+        </div>
+        <div class="stat-box">
+          <div class="mono stat-num" id="stat-decisions">0</div>
+          <div class="stat-lbl">DECISIONS</div>
+        </div>
+        <div class="stat-box">
+          <div class="mono stat-num" id="stat-price">0.0</div>
+          <div class="stat-lbl">PRICE</div>
+        </div>
+      </div>
+
+      <!-- 6. Performance Breakdown Table -->
+      <div>
+        <div class="sidebar-label">PERFORMANCE</div>
+        <div class="perf-row">
+          <span class="perf-key">buy & hold</span>
+          <span class="mono perf-val" id="perf-bnh">$10,000.00</span>
+        </div>
+        <div class="perf-row">
+          <span class="perf-key">before costs</span>
+          <span class="mono perf-val" id="perf-before-costs">$10,000.00</span>
+        </div>
+        <div class="perf-row">
+          <span class="perf-key">trades</span>
+          <span class="mono perf-val" id="perf-trades">0</span>
+        </div>
+        <div class="perf-row">
+          <span class="perf-key">fees paid</span>
+          <span class="mono perf-val" id="perf-fees">$0.00</span>
+        </div>
+        <div class="perf-row">
+          <span class="perf-key">closed W / L</span>
+          <span class="mono perf-val" id="perf-wl">0 / 0</span>
+        </div>
+        <div class="perf-row">
+          <span class="perf-key">stopped out</span>
+          <span class="mono perf-val" id="perf-stopped">0</span>
+        </div>
+        <div class="perf-row">
+          <span class="perf-key">max drawdown</span>
+          <span class="mono perf-val" id="perf-dd">0.00%</span>
+        </div>
+
+        <div class="perf-legend">
+          <span style="color: var(--blue-accent);">— Jev</span>
+          <span style="color: var(--slate-accent);">— before costs</span>
+          <span style="color: var(--gold-accent);">— buy & hold</span>
+        </div>
+      </div>
+    </div>
+  </div>
+  </div> <!-- End views-wrapper -->
+
+  <script>
+    // --- 0. Global Configuration & Multi-Asset Binance Perpetual Constants ---
+    const CATEGORY_MAP = {
+      "TOP": ["BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT", "XRPUSDT", "DOGEUSDT", "SUIUSDT", "AVAXUSDT", "NEARUSDT", "ADAUSDT", "LINKUSDT"],
+      "L1": ["BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT", "AVAXUSDT", "NEARUSDT", "SUIUSDT", "APTUSDT", "DOTUSDT", "TONUSDT", "SEIUSDT", "TIAUSDT"],
+      "DEFI": ["UNIUSDT", "AAVEUSDT", "MKRUSDT", "CRVUSDT", "LDOUSDT", "PENDLEUSDT", "INJUSDT", "RUNEUSDT", "JUPUSDT", "DYDXUSDT"],
+      "MEME": ["DOGEUSDT", "SHIBUSDT", "PEPEUSDT", "WIFUSDT", "BONKUSDT", "FLOKIUSDT", "POPCATUSDT", "MEMEUSDT", "TURBOUSDT", "1000PEPEUSDT", "1000BONKUSDT", "NEIROUSDT"]
+    };
+
+    let currentSymbol = "BTCUSDT";
+    let allMarkets = [];
+    let activeCategory = "ALL";
+    let currentView = 'master'; // 'master' or 'terminal'
+    let masterOverviewData = null;
+    let masterFilter = 'ALL'; // Default to 'ALL' so users immediately see all 727+ contracts with live PnL!
+    let masterSearchQuery = '';
+
+    // --- URL Routing System (/home, /terminal/CONTRACT/:symbol, /history, /positions, /contracts, /gainers, /losers) ---
+    function getRouteUrl(viewName, symbol = null, filter = null) {
+      if (viewName === 'master') {
+        if (filter === 'HOME' || filter === 'home') return '/home';
+        const f = (filter !== null && filter !== undefined) ? filter : masterFilter;
+        if (f === 'TRACKED') return '/queue';
+        if (f === 'ACTIVE') return '/positions';
+        if (f === 'ALL') return '/contracts';
+        if (f === 'GAINERS') return '/gainers';
+        if (f === 'LOSERS') return '/losers';
+        return '/home';
+      } else if (viewName === 'history') {
+        return '/history';
+      } else if (viewName === 'terminal') {
+        const sym = (symbol || currentSymbol || 'BTCUSDT').toUpperCase();
+        return `/terminal/CONTRACT/${sym}`;
+      }
+      return '/home';
+    }
+
+    function updateRoute(viewName, symbol = null, push = true, filter = null) {
+      const targetUrl = getRouteUrl(viewName, symbol, filter);
+      const curFilter = (filter !== null && filter !== undefined) ? filter : masterFilter;
+      const curSym = symbol || currentSymbol;
+      if (window.location.pathname !== targetUrl) {
+        if (push) {
+          history.pushState({ view: viewName, symbol: curSym, filter: curFilter }, '', targetUrl);
+        } else {
+          history.replaceState({ view: viewName, symbol: curSym, filter: curFilter }, '', targetUrl);
+        }
+      }
+    }
+
+    function switchView(viewName, pushHistory = true, symbol = null, filter = null) {
+      currentView = viewName;
+      const masterView = document.getElementById('master-view');
+      const terminalView = document.getElementById('terminal-view');
+      const historyView = document.getElementById('history-view');
+      const tabMaster = document.getElementById('tab-master');
+      const tabTerminal = document.getElementById('tab-terminal');
+      const tabHistory = document.getElementById('tab-history');
+
+      if (viewName === 'master') {
+        if (masterView) masterView.style.display = 'flex';
+        if (terminalView) terminalView.style.display = 'none';
+        if (historyView) historyView.style.display = 'none';
+        if (tabMaster) tabMaster.classList.add('active');
+        if (tabTerminal) tabTerminal.classList.remove('active');
+        if (tabHistory) tabHistory.classList.remove('active');
+        if (filter) {
+          setMasterFilter(filter === 'HOME' ? 'ALL' : filter, false);
+        }
+        fetchMasterOverview();
+      } else if (viewName === 'history') {
+        if (masterView) masterView.style.display = 'none';
+        if (terminalView) terminalView.style.display = 'none';
+        if (historyView) historyView.style.display = 'flex';
+        if (tabMaster) tabMaster.classList.remove('active');
+        if (tabTerminal) tabTerminal.classList.remove('active');
+        if (tabHistory) tabHistory.classList.add('active');
+        fetchTradeHistory();
+      } else {
+        if (masterView) masterView.style.display = 'none';
+        if (terminalView) terminalView.style.display = 'flex';
+        if (historyView) historyView.style.display = 'none';
+        if (tabMaster) tabMaster.classList.remove('active');
+        if (tabTerminal) tabTerminal.classList.add('active');
+        if (tabHistory) tabHistory.classList.remove('active');
+
+        // Resize charts safely after display switch
+        requestAnimationFrame(() => {
+          if (typeof handleResize === 'function') {
+            handleResize();
+          }
+          if (typeof mainChart !== 'undefined' && mainChart && mainChart.timeScale) {
+            try { mainChart.timeScale().fitContent(); } catch (e) {}
+          }
+          if (typeof equityChart !== 'undefined' && equityChart && equityChart.timeScale) {
+            try { equityChart.timeScale().fitContent(); } catch (e) {}
+          }
+        });
+      }
+
+      if (pushHistory) {
+        updateRoute(viewName, symbol, true, filter);
+      }
+    }
+
+    async function openMarketGraph(symbol) {
+      if (!symbol) return;
+      await selectMarket(symbol);
+      switchView('terminal', true, symbol);
+    }
+
+    async function handleRouteFromUrl(isInitial = false) {
+      const rawCleanPath = window.location.pathname.replace(/\/+$/, '') || '/';
+      const cleanPath = rawCleanPath.toLowerCase();
+      const parts = rawCleanPath.split('/').filter(Boolean);
+      const firstPart = parts.length > 0 ? parts[0].toLowerCase() : '';
+
+      if (cleanPath === '/history') {
+        switchView('history', false);
+        return;
+      }
+
+      if (firstPart === 'terminal') {
+        let sym = 'BTCUSDT';
+        if (parts.length >= 3 && parts[1].toUpperCase() === 'CONTRACT') {
+          sym = parts[2].toUpperCase();
+        } else if (parts.length >= 2) {
+          sym = parts[1].toUpperCase();
+        }
+        if (sym !== currentSymbol) {
+          await selectMarket(sym);
+        }
+        switchView('terminal', false, sym);
+        updateRoute('terminal', sym, false);
+        return;
+      }
+
+      // Tab 1: Active Positions
+      if (
+        cleanPath === '/positions' ||
+        cleanPath === '/active-positions' ||
+        cleanPath === '/active' ||
+        cleanPath === '/home/positions' ||
+        cleanPath === '/home/active-positions' ||
+        cleanPath === '/home/active'
+      ) {
+        setMasterFilter('ACTIVE', false);
+        switchView('master', false);
+        updateRoute('master', null, false, 'ACTIVE');
+        return;
+      }
+
+      // Tab 2: All Contracts
+      if (
+        cleanPath === '/contracts' ||
+        cleanPath === '/all-contracts' ||
+        cleanPath === '/all' ||
+        cleanPath === '/home/contracts' ||
+        cleanPath === '/home/all-contracts' ||
+        cleanPath === '/home/all' ||
+        cleanPath === '/watchlist' ||
+        cleanPath === '/top-watchlist' ||
+        cleanPath === '/top' ||
+        cleanPath === '/home/watchlist' ||
+        cleanPath === '/home/top-watchlist'
+      ) {
+        setMasterFilter('ALL', false);
+        switchView('master', false);
+        updateRoute('master', null, false, 'ALL');
+        return;
+      }
+
+      // Tab 0: Jev Queue / Tracked
+      if (
+        cleanPath === '/queue' ||
+        cleanPath === '/tracked' ||
+        cleanPath === '/analyzing' ||
+        cleanPath === '/home/queue' ||
+        cleanPath === '/home/tracked'
+      ) {
+        setMasterFilter('TRACKED', false);
+        switchView('master', false);
+        updateRoute('master', null, false, 'TRACKED');
+        return;
+      }
+
+      // Tab 3: Top Gainers
+      if (
+        cleanPath === '/gainers' ||
+        cleanPath === '/top-gainers' ||
+        cleanPath === '/home/gainers' ||
+        cleanPath === '/home/top-gainers'
+      ) {
+        setMasterFilter('GAINERS', false);
+        switchView('master', false);
+        updateRoute('master', null, false, 'GAINERS');
+        return;
+      }
+
+      // Tab 4: Top Losers
+      if (
+        cleanPath === '/losers' ||
+        cleanPath === '/top-losers' ||
+        cleanPath === '/home/losers' ||
+        cleanPath === '/home/top-losers'
+      ) {
+        setMasterFilter('LOSERS', false);
+        switchView('master', false);
+        updateRoute('master', null, false, 'LOSERS');
+        return;
+      }
+
+      // Default: /home or root /
+      setMasterFilter('ALL', false);
+      switchView('master', false);
+      if (cleanPath === '/' || cleanPath === '/index.html' || cleanPath === '/home') {
+        updateRoute('master', null, false, 'HOME');
+      }
+    }
+
+    window.addEventListener('popstate', () => {
+      handleRouteFromUrl(false);
+    });
+
+    function setMasterFilter(filter, updateUrl = true) {
+      masterFilter = filter;
+      document.querySelectorAll('.m-tab-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.getAttribute('data-filter') === filter);
+      });
+      renderMasterTable();
+      if (updateUrl && currentView === 'master') {
+        updateRoute('master', null, true, filter);
+      }
+    }
+
+    function handleMasterSearchInput(val) {
+      masterSearchQuery = (val || '').toUpperCase().trim();
+      renderMasterTable();
+    }
+
+    async function fetchMasterOverview() {
+      try {
+        const res = await fetch('/api/overview');
+        if (!res.ok) return;
+        const data = await res.json();
+        masterOverviewData = data;
+
+        const summ = data.portfolio_summary || {};
+        const navEq = document.getElementById('nav-total-equity');
+        if (navEq) navEq.textContent = "$10,000.00 / contract";
+        const navPos = document.getElementById('nav-active-pos-count');
+        if (navPos) navPos.textContent = `${summ.active_positions_count || 0} Open`;
+        const filterCount = document.getElementById('m-filter-active-count');
+        if (filterCount) filterCount.textContent = summ.active_positions_count || 0;
+
+        const trackedCount = data.tracked_count !== undefined ? data.tracked_count : (data.tracked_symbols ? data.tracked_symbols.length : 0);
+        const navTracked = document.getElementById('nav-tracked-count');
+        if (navTracked) navTracked.textContent = `${trackedCount} Active`;
+        const filterTrackedCount = document.getElementById('m-filter-tracked-count');
+        if (filterTrackedCount) filterTrackedCount.textContent = trackedCount;
+
+        renderMasterKPIs(summ, data.active_positions || [], data.markets || []);
+        renderMasterTable();
+      } catch (e) {
+        console.error("Master overview fetch error:", e);
+      }
+    }
+
+    function renderMasterKPIs(summ, activePositions, markets) {
+      const trackedCount = masterOverviewData.tracked_count !== undefined ? masterOverviewData.tracked_count : (masterOverviewData.tracked_symbols ? masterOverviewData.tracked_symbols.length : 0);
+      const standbyBanner = document.getElementById('jev-standby-banner');
+      if (standbyBanner) {
+        standbyBanner.style.display = (trackedCount === 0 && (summ.active_positions_count || 0) === 0) ? 'flex' : 'none';
+      }
+
+      // 1. Isolated Contract Balance
+      const eqElem = document.getElementById('m-kpi-equity');
+      if (eqElem) eqElem.textContent = "$10,000.00";
+
+      const pnlElem = document.getElementById('m-kpi-pnl');
+      if (pnlElem) {
+        const pnl = summ.total_pnl_usd || 0.0;
+        const sign = pnl >= 0 ? '+' : '-';
+        const col = pnl > 0 ? '#22c55e' : (pnl < 0 ? '#ef4444' : '#94a3b8');
+        pnlElem.innerHTML = `Isolated $10,000/contract • Net PnL: <span style="color: ${col}; font-weight: 700;">${sign}$${Math.abs(pnl).toFixed(2)}</span>`;
+      }
+
+      // 2. Total Unrealized PnL
+      const unElem = document.getElementById('m-kpi-unrealized');
+      if (unElem) {
+        const u = summ.total_unrealized_pnl_usd || 0.0;
+        const sign = u >= 0 ? '+' : '-';
+        unElem.textContent = `${sign}$${Math.abs(u).toFixed(2)}`;
+        unElem.style.color = u > 0 ? '#22c55e' : (u < 0 ? '#ef4444' : '#ffffff');
+      }
+      const unSub = document.getElementById('m-kpi-unrealized-sub');
+      if (unSub) unSub.textContent = `Across ${summ.active_positions_count || 0} open position(s)`;
+
+      // 3. Total Realized PnL
+      const rElem = document.getElementById('m-kpi-realized');
+      if (rElem) {
+        const r = summ.total_realized_pnl_usd || 0.0;
+        const sign = r >= 0 ? '+' : '-';
+        rElem.textContent = `${sign}$${Math.abs(r).toFixed(2)}`;
+        rElem.style.color = r > 0 ? '#22c55e' : (r < 0 ? '#ef4444' : '#ffffff');
+      }
+      const rSub = document.getElementById('m-kpi-realized-sub');
+      if (rSub) rSub.textContent = `${summ.winning_trades || 0}W / ${summ.losing_trades || 0}L • ${summ.win_rate_pct || 0}% Win Rate`;
+
+      // 4. Margin Utilization (Each contract is an isolated $10,000 account)
+      const mElem = document.getElementById('m-kpi-margin');
+      const usedMargin = summ.total_margin_used_usdt || 0;
+      const numAct = summ.active_positions_count || (activePositions ? activePositions.length : 0) || 0;
+      const avgMarginPerContract = numAct > 0 ? (usedMargin / numAct) : 0;
+      const utilPct = numAct > 0 ? (avgMarginPerContract / 10000.0) * 100 : 0.0;
+
+      if (mElem) {
+        mElem.textContent = `${utilPct.toFixed(1)}%`;
+      }
+      const mBar = document.getElementById('m-kpi-margin-bar');
+      if (mBar) mBar.style.width = `${Math.min(100, Math.max(0, utilPct))}%`;
+      const mPct = document.getElementById('m-kpi-margin-pct');
+      if (mPct) {
+        if (numAct > 0) {
+          mPct.textContent = `$${avgMarginPerContract.toFixed(0)} / $10,000 per active contract ($${usedMargin.toFixed(0)} across ${numAct} open)`;
+        } else {
+          mPct.textContent = `$0 / $10,000 per contract (0 open positions)`;
+        }
+      }
+
+      // 5. Active Contracts
+      const actElem = document.getElementById('m-kpi-active-count');
+      if (actElem) actElem.textContent = `${summ.active_positions_count || 0} Open`;
+      const feesSub = document.getElementById('m-kpi-fees-sub');
+      if (feesSub) feesSub.textContent = `Fees: $${(summ.total_fees_paid_usd || 0).toFixed(2)} • ${markets.length} Monitored`;
+
+      // 6. Volume Leader
+      if (markets && markets.length > 0) {
+        const topM = markets[0];
+        const leaderSym = document.getElementById('m-kpi-leader-sym');
+        if (leaderSym) leaderSym.textContent = topM.symbol;
+        const leaderVol = document.getElementById('m-kpi-leader-vol');
+        if (leaderVol) {
+          const v = topM.quote_volume_usd ? `$${(topM.quote_volume_usd / 1e9).toFixed(2)}B 24h` : '';
+          const chgSign = (topM.change_24h_pct || 0) >= 0 ? '+' : '';
+          leaderVol.textContent = `${v} • ${chgSign}${(topM.change_24h_pct || 0).toFixed(2)}%`;
+        }
+      }
+    }
+
+    function renderMasterTable() {
+      const tbody = document.getElementById('master-table-body');
+      if (!tbody || !masterOverviewData || !masterOverviewData.markets) return;
+
+      let list = [...masterOverviewData.markets];
+
+      if (masterFilter === 'TRACKED') {
+        const trackedSet = new Set(masterOverviewData.tracked_symbols || []);
+        list = list.filter(m => m.is_tracked || trackedSet.has(m.symbol));
+        if (list.length === 0) {
+          tbody.innerHTML = `
+            <tr>
+              <td colspan="12" style="text-align: center; padding: 40px; color: #64748b;">
+                <div style="font-size: 15px; font-weight: 700; margin-bottom: 6px; color: #f8fafc;">⚡ Jev Analysis Queue is Empty</div>
+                <div style="font-size: 12.5px; margin-bottom: 16px; color: #94a3b8; max-width: 520px; margin-left: auto; margin-right: auto; line-height: 1.5;">
+                  By default, Jev does not analyze or trade any contract. Click the <span class="mono" style="color: #38bdf8; font-weight: 700; background: #0f172a; padding: 2px 7px; border-radius: 4px; border: 1px solid #1e293b;">+ Analyze</span> button on any contract in <strong>All Contracts</strong>, <strong>Top Gainers</strong>, or <strong>Top Losers</strong> to initiate complete AI analysis and start autonomous trading.
+                </div>
+                <button class="btn-open-chart" onclick="setMasterFilter('ALL')">Browse All 725+ Contracts →</button>
+              </td>
+            </tr>
+          `;
+          return;
+        }
+      } else if (masterFilter === 'ACTIVE') {
+        list = list.filter(m => m.has_position);
+        if (list.length === 0) {
+          tbody.innerHTML = `
+            <tr>
+              <td colspan="12" style="text-align: center; padding: 40px; color: #64748b;">
+                <div style="font-size: 14px; font-weight: 600; margin-bottom: 6px; color: #94a3b8;">No Active Positions Currently Open</div>
+                <div style="font-size: 12px; margin-bottom: 14px;">Select any contract and click [+] Analyze to have Jev begin evaluating and trading.</div>
+                <button class="btn-open-chart" onclick="setMasterFilter('ALL')">Browse All Contracts →</button>
+              </td>
+            </tr>
+          `;
+          return;
+        }
+      } else if (masterFilter === 'GAINERS') {
+        list.sort((a, b) => (b.change_24h_pct || 0) - (a.change_24h_pct || 0));
+        list = list.slice(0, 60);
+      } else if (masterFilter === 'LOSERS') {
+        list.sort((a, b) => (a.change_24h_pct || 0) - (b.change_24h_pct || 0));
+        list = list.slice(0, 60);
+      }
+
+      if (masterSearchQuery) {
+        list = list.filter(m => m.symbol.includes(masterSearchQuery));
+      }
+
+      if (list.length === 0) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="10" style="text-align: center; padding: 30px; color: #64748b;">
+              No markets matched "${masterSearchQuery}".
+            </td>
+          </tr>
+        `;
+        return;
+      }
+
+      // Update counter badge and tab count
+      const countBadge = document.getElementById('m-contracts-count-badge');
+      if (countBadge) {
+        countBadge.textContent = `Showing ${list.length} of ${masterOverviewData.markets.length} Contracts`;
+      }
+      const tabAllCount = document.getElementById('m-tab-all-count');
+      if (tabAllCount) {
+        tabAllCount.textContent = masterOverviewData.markets.length;
+      }
+
+      tbody.innerHTML = list.map(m => {
+        const isUp = (m.change_24h_pct || 0) >= 0;
+        const chgColor = isUp ? 'var(--green-accent)' : 'var(--red-accent)';
+        const chgSign = isUp ? '+' : '';
+
+        // 1. Account Capital & Cash ($10,000 baseline)
+        const cap = m.capital_usdt !== undefined ? m.capital_usdt : 10000.0;
+        const cash = m.cash_usdt !== undefined ? m.cash_usdt : 10000.0;
+        const capDiff = cap - 10000.0;
+        const capDiffColor = capDiff > 0.001 ? 'var(--green-accent)' : (capDiff < -0.001 ? 'var(--red-accent)' : '#64748b');
+        const capDiffSign = capDiff >= 0 ? '+' : '';
+        const capHtml = `
+          <div>
+            <span class="mono" style="font-weight: 800; color: #ffffff; font-size: 13px;">$${cap.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+            <span class="mono" style="font-size: 10px; color: ${capDiffColor}; font-weight: 700; margin-left: 3px;">(${capDiffSign}$${capDiff.toFixed(2)})</span>
+            <br>
+            <span class="mono" style="font-size: 10.5px; color: #64748b;">Free Cash: $${cash.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+          </div>
+        `;
+
+        // 2. Mark Price & 24h High/Low Range
+        const highPrice = m.high_24h || m.price;
+        const lowPrice = m.low_24h || m.price;
+        const rangeHtml = `
+          <div>
+            <span class="mono" style="font-weight: 700; color: #f8fafc; font-size: 13px;">$${formatMarketPrice(m.price)}</span>
+            <br>
+            <span class="mono" style="font-size: 10px; color: #64748b;">H: $${formatMarketPrice(highPrice)} • L: $${formatMarketPrice(lowPrice)}</span>
+          </div>
+        `;
+
+        // 3. 24h Change & Quote Volume
+        let volStr = '—';
+        if (m.quote_volume_usd) {
+          if (m.quote_volume_usd >= 1e9) volStr = `$${(m.quote_volume_usd / 1e9).toFixed(2)}B`;
+          else if (m.quote_volume_usd >= 1e6) volStr = `$${(m.quote_volume_usd / 1e6).toFixed(1)}M`;
+          else volStr = `$${(m.quote_volume_usd / 1e3).toFixed(0)}K`;
+        }
+        const chgHtml = `
+          <div>
+            <span class="mono" style="color: ${chgColor}; font-weight: 700; font-size: 12px;">${chgSign}${(m.change_24h_pct || 0).toFixed(2)}%</span>
+            <br>
+            <span class="mono" style="font-size: 10px; color: #64748b;">Vol: ${volStr}</span>
+          </div>
+        `;
+
+        // 4. Position Badge
+        let posBadge = '<span class="pos-badge-flat">— FLAT</span>';
+        if (m.has_position) {
+          if (m.position_side === 'LONG') {
+            posBadge = `<span class="pos-badge-long">▲ LONG ${m.leverage}x</span>`;
+          } else if (m.position_side === 'SHORT') {
+            posBadge = `<span class="pos-badge-short">▼ SHORT ${m.leverage}x</span>`;
+          }
+        }
+
+        // 5. Size & Notional
+        const sizeHtml = m.has_position
+          ? `<span class="mono" style="color: #f1f5f9; font-weight: 700;">${m.position_size} ${m.base_asset}</span><br><span class="mono" style="font-size: 10.5px; color: #64748b;">$${(m.notional_usd || 0).toFixed(2)}</span>`
+          : '<span style="color: #64748b;" class="mono">—</span>';
+
+        // 6. Entry vs Liq Price
+        let entryLiqHtml = '<span style="color: #64748b;" class="mono">—</span>';
+        if (m.has_position && m.entry_price) {
+          const liqStr = m.liquidation_price ? `<br><span class="mono" style="font-size: 10px; color: #f87171;">Liq: $${formatMarketPrice(m.liquidation_price)}</span>` : '';
+          entryLiqHtml = `<span class="mono" style="color: #cbd5e1; font-weight: 600;">$${formatMarketPrice(m.entry_price)}</span>${liqStr}`;
+        }
+
+        // 7. Unrealized PnL
+        let unHtml = '<span style="color: #64748b;" class="mono">$0.00</span>';
+        if (m.has_position && m.unrealized_pnl_usd !== undefined) {
+          const u = m.unrealized_pnl_usd;
+          const uSign = u >= 0 ? '+' : '-';
+          const uCol = u > 0 ? '#22c55e' : (u < 0 ? '#ef4444' : '#cbd5e1');
+          const roe = m.roe_pct !== undefined ? m.roe_pct : 0;
+          unHtml = `<span style="color: ${uCol}; font-weight: 700;" class="mono">${uSign}$${Math.abs(u).toFixed(2)}<br><span style="font-size: 10px;">(${uSign}${Math.abs(roe).toFixed(2)}% ROE)</span></span>`;
+        }
+
+        // 8. Realized PnL
+        let rHtml = '<span style="color: #64748b;" class="mono">$0.00</span>';
+        if (m.realized_pnl_usd !== undefined && m.realized_pnl_usd !== 0) {
+          const r = m.realized_pnl_usd;
+          const rSign = r >= 0 ? '+' : '-';
+          const rCol = r > 0 ? '#22c55e' : '#ef4444';
+          rHtml = `<span style="color: ${rCol}; font-weight: 700;" class="mono">${rSign}$${Math.abs(r).toFixed(2)}</span><br><span class="mono" style="font-size: 10px; color: #64748b;">${m.trades_count || 0} trade(s)</span>`;
+        } else if (m.trades_count) {
+          rHtml = `<span style="color: #64748b;" class="mono">$0.00</span><br><span class="mono" style="font-size: 10px; color: #64748b;">${m.trades_count} trade(s)</span>`;
+        }
+
+        // 9. Jev Stance, Lean, and Market Regime
+        let jevActionHtml = '<span class="jev-stance-wait">WAIT</span>';
+        if (m.jev_action === 'BUY') {
+          jevActionHtml = `<span class="jev-stance-buy">▲ BUY</span> <span class="mono" style="font-size: 11px; font-weight: 700; color: #4ade80;">${Math.round((m.jev_confidence || 0) * 100)}%</span>`;
+        } else if (m.jev_action === 'SELL') {
+          jevActionHtml = `<span class="jev-stance-sell">▼ SELL</span> <span class="mono" style="font-size: 11px; font-weight: 700; color: #f87171;">${Math.round((m.jev_confidence || 0) * 100)}%</span>`;
+        }
+
+        const leanVal = m.jev_lean !== undefined ? m.jev_lean : 0.0;
+        const leanClass = leanVal > 0.05 ? 'jev-lean-bull' : (leanVal < -0.05 ? 'jev-lean-bear' : 'jev-lean-neutral');
+        const leanSign = leanVal > 0 ? '+' : '';
+        const leanBadge = `<span class="jev-lean-badge ${leanClass}">Lean: ${leanSign}${leanVal.toFixed(2)}</span>`;
+        const regimeTag = m.market_regime ? `<span class="regime-pill">${m.market_regime.replace(/_/g, ' ')}</span>` : '';
+
+        const jevCellHtml = `
+          <div>
+            ${jevActionHtml}
+            ${leanBadge}
+            ${regimeTag}
+          </div>
+        `;
+
+        const isTracked = m.is_tracked || (masterOverviewData && masterOverviewData.tracked_symbols && masterOverviewData.tracked_symbols.includes(m.symbol));
+        const trackBtnHtml = isTracked
+          ? `<button class="btn-track-active" onclick="event.stopPropagation(); toggleTrackSymbol('${m.symbol}')" title="Jev is actively analyzing & trading ${m.symbol}. Click to remove."><span class="pulse-dot-green"></span> Analyzing <span class="remove-cross">×</span></button>`
+          : `<button class="btn-track-add" onclick="event.stopPropagation(); toggleTrackSymbol('${m.symbol}')" title="Add ${m.symbol} to Jev AI: Run complete structural analysis and start autonomous trading"><span style="font-size: 13px; font-weight: 900;">+</span> Analyze</button>`;
+
+        return `
+          <tr class="master-table-row ${m.has_position ? 'has-pos' : ''}" onclick="openMarketGraph('${m.symbol}')">
+            <td>
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="font-weight: 800; color: #ffffff; font-size: 13px;">${m.symbol}</span>
+                <span style="font-size: 10px; background: #131722; color: #94a3b8; padding: 1px 5px; border-radius: 3px; border: 1px solid #1f2536;">PERP</span>
+              </div>
+            </td>
+            <td style="text-align: center;">
+              ${trackBtnHtml}
+            </td>
+            <td>${capHtml}</td>
+            <td>${rangeHtml}</td>
+            <td>${chgHtml}</td>
+            <td>${posBadge}</td>
+            <td>${sizeHtml}</td>
+            <td>${entryLiqHtml}</td>
+            <td>${unHtml}</td>
+            <td>${rHtml}</td>
+            <td>${jevCellHtml}</td>
+            <td style="text-align: right;">
+              <button class="btn-open-chart" onclick="event.stopPropagation(); openMarketGraph('${m.symbol}')">
+                Open Chart ↗
+              </button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    async function toggleTrackSymbol(sym) {
+      if (!sym) return;
+      try {
+        const res = await fetch('/api/tracked/toggle', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ symbol: sym })
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.is_tracked) {
+          showToast(`⚡ Added <b>${sym}</b> to Jev AI! Initiating complete structural analysis & autonomous trading...`, 'success');
+        } else {
+          showToast(`Removed <b>${sym}</b> from Jev AI analysis queue.`, 'info');
+        }
+        await fetchMasterOverview();
+        if (currentView === 'terminal' && sym === currentSymbol) {
+          updateTerminalTrackButton(data.is_tracked);
+        }
+      } catch (e) {
+        console.error("Track toggle error:", e);
+      }
+    }
+
+    async function toggleTrackCurrentSymbol() {
+      await toggleTrackSymbol(currentSymbol);
+    }
+
+    function updateTerminalTrackButton(isTracked) {
+      const btn = document.getElementById('terminal-track-btn');
+      if (!btn) return;
+      if (isTracked) {
+        btn.className = "btn-track-terminal active";
+        btn.innerHTML = `<span class="pulse-dot-green"></span> Jev Analyzing Active <span class="remove-cross">×</span>`;
+        btn.title = `Jev is actively analyzing & trading ${currentSymbol}. Click to stop.`;
+      } else {
+        btn.className = "btn-track-terminal";
+        btn.innerHTML = `<span style="font-size: 13px; font-weight: 900;">+</span> Add to Jev Analysis`;
+        btn.title = `Add ${currentSymbol} to Jev AI: Run complete structural analysis and start autonomous trading`;
+      }
+    }
+
+    function showToast(msg, type = 'info') {
+      let c = document.getElementById('global-toast-container');
+      if (!c) {
+        c = document.createElement('div');
+        c.id = 'global-toast-container';
+        c.style.cssText = 'position: fixed; bottom: 24px; right: 24px; z-index: 999999; display: flex; flex-direction: column; gap: 8px; pointer-events: none;';
+        document.body.appendChild(c);
+      }
+      const t = document.createElement('div');
+      const borderCol = type === 'success' ? '#22c55e' : (type === 'error' ? '#ef4444' : '#38bdf8');
+      const bgCol = type === 'success' ? 'rgba(6, 78, 59, 0.95)' : (type === 'error' ? 'rgba(127, 29, 29, 0.95)' : 'rgba(15, 23, 42, 0.95)');
+      t.style.cssText = `background: ${bgCol}; color: #ffffff; border: 1px solid ${borderCol}; border-radius: 6px; padding: 10px 16px; font-size: 12px; font-weight: 600; box-shadow: 0 4px 14px rgba(0,0,0,0.5); pointer-events: auto; transition: opacity 0.3s ease; display: flex; align-items: center; gap: 8px; max-width: 380px; backdrop-filter: blur(4px);`;
+      t.innerHTML = `<span>${msg}</span>`;
+      c.appendChild(t);
+      setTimeout(() => {
+        t.style.opacity = '0';
+        setTimeout(() => t.remove(), 350);
+      }, 3500);
+    }
+
+    async function confirmResetAllMarkets() {
+      if (!confirm("Are you sure you want to reset all positions and trade history across ALL markets?\n\nEach market will restart fresh with $10,000.00 cash and 0 contracts in analysis queue.")) {
+        return;
+      }
+      try {
+        const res = await fetch('/api/reset', { method: 'POST' });
+        if (res.ok) {
+          showToast("All markets reset to pristine $10,000.00 USDT with 0 analyzed contracts!", 'success');
+          await fetchMasterOverview();
+        }
+      } catch (e) {
+        console.error("Reset error:", e);
+      }
+    }
+
+    // ==========================================
+    // --- 0.2 TRADE HISTORY & METRICS VIEW ---
+    // ==========================================
+    let tradeHistoryData = null;
+    let historyFilter = 'ALL';
+    let historySearchQuery = '';
+
+    async function fetchTradeHistory(manual = false) {
+      try {
+        const res = await fetch('/api/trades');
+        if (!res.ok) return;
+        const data = await res.json();
+        tradeHistoryData = data;
+
+        const roundTrips = data.round_trips || [];
+        const summary = data.summary || {};
+
+        // Update nav badge & master quick button badge
+        const totalCount = roundTrips.length;
+        const navCount = document.getElementById('nav-trade-history-count');
+        if (navCount) navCount.textContent = totalCount;
+        const quickCount = document.getElementById('m-quick-trades-count');
+        if (quickCount) quickCount.textContent = totalCount;
+
+        renderHistoryKPIs(summary, roundTrips);
+        renderHistoryTable();
+      } catch (e) {
+        console.error("Failed to fetch trade history:", e);
+      }
+    }
+
+    function setHistoryFilter(filter) {
+      historyFilter = filter;
+      document.querySelectorAll('[data-hfilter]').forEach(b => {
+        b.classList.toggle('active', b.getAttribute('data-hfilter') === filter);
+      });
+      renderHistoryTable();
+    }
+
+    function handleHistorySearchInput(val) {
+      historySearchQuery = (val || '').toUpperCase().trim();
+      renderHistoryTable();
+    }
+
+    function renderHistoryKPIs(summary, roundTrips) {
+      const cleanRoundTrips = (roundTrips || []).filter(t => t.symbol && /^[\x00-\x7F]+$/.test(t.symbol));
+      const closed = cleanRoundTrips.filter(t => t.status === 'CLOSED');
+      const openCount = cleanRoundTrips.filter(t => t.status === 'OPEN').length;
+      const wins = closed.filter(t => (t.realized_pnl_usd || 0) > 0);
+      const losses = closed.filter(t => (t.realized_pnl_usd || 0) <= 0);
+
+      // 1. Total Closed Trades
+      const tElem = document.getElementById('h-kpi-total-trades');
+      if (tElem) tElem.textContent = closed.length;
+      const opElem = document.getElementById('h-kpi-open-trades');
+      if (opElem) opElem.textContent = `${openCount} Active Position(s)`;
+
+      // 2. Win Rate
+      const wr = closed.length > 0 ? ((wins.length / closed.length) * 100).toFixed(1) : '0.0';
+      const wrElem = document.getElementById('h-kpi-win-rate');
+      if (wrElem) {
+        wrElem.textContent = `${wr}%`;
+        wrElem.style.color = parseFloat(wr) >= 50 ? '#22c55e' : (closed.length > 0 ? '#f87171' : '#ffffff');
+      }
+      const wlElem = document.getElementById('h-kpi-wl-record');
+      if (wlElem) wlElem.textContent = `${wins.length}W / ${losses.length}L`;
+
+      // 3. Realized PnL
+      const totalPnl = closed.reduce((acc, t) => acc + (t.realized_pnl_usd || 0), 0);
+      const pnlElem = document.getElementById('h-kpi-realized-pnl');
+      if (pnlElem) {
+        const sign = totalPnl >= 0 ? '+' : '-';
+        pnlElem.textContent = `${sign}$${Math.abs(totalPnl).toFixed(2)}`;
+        pnlElem.style.color = totalPnl > 0 ? '#22c55e' : (totalPnl < 0 ? '#ef4444' : '#ffffff');
+      }
+
+      // 4. Profit Factor
+      const grossWins = wins.reduce((acc, t) => acc + (t.realized_pnl_usd || 0), 0);
+      const grossLoss = Math.abs(losses.reduce((acc, t) => acc + (t.realized_pnl_usd || 0), 0));
+      let pf = '0.00';
+      if (grossLoss > 0) pf = (grossWins / grossLoss).toFixed(2);
+      else if (grossWins > 0) pf = '999.0';
+      const pfElem = document.getElementById('h-kpi-profit-factor');
+      if (pfElem) pfElem.textContent = pf;
+
+      // 5. Total Fees
+      const totalFees = roundTrips.reduce((acc, t) => acc + (t.total_fees_usd || 0), 0);
+      const feesElem = document.getElementById('h-kpi-fees-paid');
+      if (feesElem) feesElem.textContent = `$${totalFees.toFixed(2)}`;
+
+      // 6. Stopped Out
+      const stopped = closed.filter(t => (t.exit_reason || '').toLowerCase().includes('stop')).length;
+      const stopElem = document.getElementById('h-kpi-stopped-out');
+      if (stopElem) stopElem.textContent = stopped;
+
+      // Filter Counts
+      const fAll = document.getElementById('h-filter-all-count');
+      if (fAll) fAll.textContent = roundTrips.length;
+      const fWins = document.getElementById('h-filter-wins-count');
+      if (fWins) fWins.textContent = wins.length;
+      const fLoss = document.getElementById('h-filter-losses-count');
+      if (fLoss) fLoss.textContent = losses.length;
+      const fOpen = document.getElementById('h-filter-open-count');
+      if (fOpen) fOpen.textContent = openCount;
+    }
+
+    function renderHistoryTable() {
+      const tbody = document.getElementById('history-table-body');
+      if (!tbody || !tradeHistoryData || !tradeHistoryData.round_trips) return;
+
+      let list = [...tradeHistoryData.round_trips].filter(t => t.symbol && /^[\x00-\x7F]+$/.test(t.symbol));
+
+      if (historyFilter === 'WINS') {
+        list = list.filter(t => t.status === 'CLOSED' && (t.realized_pnl_usd || 0) > 0);
+      } else if (historyFilter === 'LOSSES') {
+        list = list.filter(t => t.status === 'CLOSED' && (t.realized_pnl_usd || 0) <= 0);
+      } else if (historyFilter === 'OPEN') {
+        list = list.filter(t => t.status === 'OPEN');
+      }
+
+      if (historySearchQuery) {
+        list = list.filter(t => t.symbol.includes(historySearchQuery));
+      }
+
+      if (list.length === 0) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="11" style="text-align: center; padding: 40px; color: #64748b;">
+              <div style="font-size: 14px; font-weight: 600; margin-bottom: 6px; color: #94a3b8;">No Trades Found</div>
+              <div style="font-size: 12px;">As Jev evaluates markets and triggers entries and exits according to policy, complete round-trip trades will be logged here.</div>
+            </td>
+          </tr>
+        `;
+        return;
+      }
+
+      tbody.innerHTML = list.map(t => {
+        const isOpen = t.status === 'OPEN';
+        const pnl = t.realized_pnl_usd || 0.0;
+        const roe = t.roe_pct || 0.0;
+        const isWin = pnl > 0.001;
+        const pnlSign = pnl >= 0 ? '+' : '';
+        const pnlClass = isOpen ? 'trade-pill-open' : (isWin ? 'trade-pill-win' : 'trade-pill-loss');
+        const pnlCol = isOpen ? '#38bdf8' : (isWin ? '#4ade80' : '#f87171');
+
+        const sideBadge = t.side === 'LONG'
+          ? `<span class="pos-badge-long">▲ LONG ${t.leverage || 2}x</span>`
+          : `<span class="pos-badge-short">▼ SHORT ${t.leverage || 2}x</span>`;
+
+        // Format timestamps
+        const formatTime = (ts) => {
+          if (!ts) return '—';
+          try {
+            const d = new Date(ts);
+            return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) + ' ' + d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+          } catch(e) { return ts; }
+        };
+
+        const inTimeStr = formatTime(t.entry_time);
+        const outTimeStr = isOpen ? '<span style="color: #38bdf8; font-weight: 700;">● ACTIVE</span>' : formatTime(t.exit_time);
+
+        return `
+          <tr class="master-table-row" onclick="openMarketGraph('${t.symbol}')">
+            <td>
+              <div class="mono" style="font-size: 11.5px; font-weight: 700; color: #f1f5f9;">${t.trade_id || '—'}</div>
+              <div class="duration-pill">${t.duration_str || '—'}</div>
+            </td>
+            <td>
+              <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 3px;">
+                <span style="font-weight: 800; color: #ffffff; font-size: 13px;">${t.symbol}</span>
+                <span style="font-size: 9px; background: #131722; color: #94a3b8; padding: 1px 4px; border-radius: 3px; border: 1px solid #1f2536;">PERP</span>
+              </div>
+              ${sideBadge}
+            </td>
+            <td>
+              <div class="mono" style="color: #f1f5f9; font-weight: 700;">${t.size_asset}</div>
+              <div class="mono" style="font-size: 10.5px; color: #64748b;">$${(t.notional_usd || 0).toFixed(2)}</div>
+            </td>
+            <td>
+              <div class="mono" style="color: #cbd5e1; font-weight: 700;">$${formatMarketPrice(t.entry_price || 0)}</div>
+              <div class="mono" style="font-size: 10px; color: #64748b;">${inTimeStr}</div>
+            </td>
+            <td>
+              <div class="mono" style="color: #cbd5e1; font-weight: 700;">${t.exit_price ? '$' + formatMarketPrice(t.exit_price) : '<span style="color: #38bdf8;">In Progress</span>'}</div>
+              <div class="mono" style="font-size: 10px; color: #64748b;">${outTimeStr}</div>
+            </td>
+            <td>
+              <div class="mono" style="color: #f1f5f9; font-weight: 700;">$${(t.margin_usd || 0).toFixed(2)}</div>
+              <div class="mono" style="font-size: 10px; color: #64748b;">${t.leverage || 2}x Lev</div>
+            </td>
+            <td>
+              <div class="mono" style="color: #94a3b8; font-size: 11px;">$${(t.total_fees_usd || 0).toFixed(2)}</div>
+              <div style="font-size: 9.5px; color: #64748b;">5 bps taker</div>
+            </td>
+            <td>
+              ${isOpen
+                ? `<span class="mono" style="color: #38bdf8; font-weight: 700;">In Position</span>`
+                : `<div class="${pnlClass} mono" style="font-size: 13px;">${pnlSign}$${pnl.toFixed(2)}</div>
+                   <div class="mono" style="font-size: 10px; color: ${pnlCol}; font-weight: 700;">(${pnlSign}${roe.toFixed(2)}% ROE)</div>`
+              }
+            </td>
+            <td>
+              <span class="mono" style="color: #94a3b8; font-size: 11px;">${t.duration_str || '—'}</span>
+            </td>
+            <td>
+              <div style="font-size: 11px; color: #cbd5e1; max-width: 180px; white-space: normal; line-height: 1.3;">
+                ${t.exit_reason || t.entry_reason || 'Autonomous Execution'}
+              </div>
+            </td>
+            <td style="text-align: right;">
+              <button class="btn-open-chart" onclick="event.stopPropagation(); openMarketGraph('${t.symbol}')">
+                Chart ↗
+              </button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    async function fetchMarkets() {
+      try {
+        const res = await fetch('/api/markets');
+        const data = await res.json();
+        if (Array.isArray(data) && data.length > 0) {
+          allMarkets = data;
+          const badge = document.getElementById('market-count-badge');
+          if (badge) badge.textContent = `${allMarkets.length} markets`;
+          renderMarketsList(getFilteredMarkets());
+        }
+      } catch (e) {
+        console.error("Failed to load markets list:", e);
+      }
+    }
+
+    function getFilteredMarkets(searchQuery = '') {
+      let list = allMarkets;
+      if (activeCategory !== 'ALL' && CATEGORY_MAP[activeCategory]) {
+        const set = new Set(CATEGORY_MAP[activeCategory]);
+        list = list.filter(m => set.has(m.symbol));
+      }
+      if (searchQuery) {
+        const q = searchQuery.toUpperCase().trim();
+        list = list.filter(m => m.symbol.includes(q));
+      }
+      return list;
+    }
+
+    function formatMarketPrice(p) {
+      if (p >= 1000) return p.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+      if (p >= 1) return p.toFixed(2);
+      if (p >= 0.01) return p.toFixed(4);
+      return p.toFixed(6);
+    }
+
+    function renderMarketsList(markets) {
+      const container = document.getElementById('market-items-list');
+      if (!container) return;
+      if (!markets || markets.length === 0) {
+        container.innerHTML = '<div class="market-empty">No matching markets</div>';
+        return;
+      }
+
+      container.innerHTML = markets.slice(0, 150).map(m => {
+        const isSelected = m.symbol === currentSymbol;
+        const chg = m.change_24h_pct || 0;
+        const isUp = chg >= 0;
+        const chgColor = isUp ? 'var(--green-accent)' : 'var(--red-accent)';
+        const chgSign = isUp ? '+' : '';
+        const volUsd = m.quote_volume_24h ? `$${(m.quote_volume_24h / 1e6).toFixed(1)}M vol` : '';
+
+        return `
+          <div class="market-row ${isSelected ? 'active' : ''}" onclick="selectMarket('${m.symbol}')">
+            <div class="market-name-wrap">
+              <span class="market-name">${m.symbol}</span>
+              <span class="market-vol-badge">${volUsd}</span>
+            </div>
+            <div class="market-stats-wrap">
+              <span class="market-price">$${formatMarketPrice(m.price)}</span>
+              <span class="market-change-badge" style="color: ${chgColor};">${chgSign}${chg.toFixed(2)}%</span>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function toggleMarketDropdown(e) {
+      e.stopPropagation();
+      const popover = document.getElementById('market-popover');
+      const btn = document.getElementById('symbol-dropdown-btn');
+      if (!popover) return;
+      const isOpen = popover.style.display !== 'none';
+      if (isOpen) {
+        popover.style.display = 'none';
+        btn.classList.remove('open');
+      } else {
+        popover.style.display = 'flex';
+        btn.classList.add('open');
+        if (allMarkets.length === 0) {
+          fetchMarkets();
+        } else {
+          renderMarketsList(getFilteredMarkets());
+        }
+        setTimeout(() => {
+          const input = document.getElementById('market-search');
+          if (input) {
+            input.focus();
+            input.select();
+          }
+        }, 50);
+      }
+    }
+
+    function handleMarketSearch(query) {
+      renderMarketsList(getFilteredMarkets(query));
+    }
+
+    function selectMarketCategory(cat) {
+      activeCategory = cat;
+      document.querySelectorAll('.popover-tab').forEach(b => {
+        b.classList.toggle('active', b.getAttribute('data-cat') === cat);
+      });
+      const q = document.getElementById('market-search')?.value || '';
+      renderMarketsList(getFilteredMarkets(q));
+    }
+
+    async function selectMarket(sym) {
+      if (sym === currentSymbol) {
+        document.getElementById('market-popover').style.display = 'none';
+        document.getElementById('symbol-dropdown-btn')?.classList.remove('open');
+        return;
+      }
+      currentSymbol = sym;
+      const symElem = document.getElementById('active-symbol-text');
+      if (symElem) symElem.textContent = sym;
+      const navSym = document.getElementById('nav-terminal-sym');
+      if (navSym) navSym.textContent = sym;
+      document.getElementById('market-popover').style.display = 'none';
+      document.getElementById('symbol-dropdown-btn')?.classList.remove('open');
+
+      if (currentView === 'terminal') {
+        updateRoute('terminal', sym, true);
+      }
+
+      // Notify server of active market switch
+      try {
+        fetch('/api/select_market', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ symbol: sym }),
+        }).catch(err => console.debug(err));
+      } catch (e) {}
+
+      // Reset fitting and reload everything for new symbol immediately
+      hasFitCandles = false;
+      await Promise.all([
+        loadCandles(),
+        updateDashboardState(),
+        loadMarkers(),
+      ]);
+    }
+
+    // Close popover when clicking anywhere outside
+    document.addEventListener('click', (e) => {
+      const wrap = document.getElementById('market-dropdown-wrap');
+      if (wrap && !wrap.contains(e.target)) {
+        const popover = document.getElementById('market-popover');
+        if (popover) popover.style.display = 'none';
+        document.getElementById('symbol-dropdown-btn')?.classList.remove('open');
+      }
+    });
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        const popover = document.getElementById('market-popover');
+        if (popover) popover.style.display = 'none';
+        document.getElementById('symbol-dropdown-btn')?.classList.remove('open');
+      }
+    });
+
+    // --- 1. Global Clock & Countdown Scrubber ---
+    let cycleIntervalSec = 60;
+    let secondsToNextEval = 60;
+
+    setInterval(() => {
+      const now = new Date();
+      const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+      const formatted = `${monthNames[now.getMonth()]} ${now.getDate()}, ${now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'})}`;
+      const clk = document.getElementById('clock-timestamp');
+      if (clk) clk.textContent = formatted;
+
+      // Countdown to next evaluation cycle
+      if (secondsToNextEval > 0) {
+        secondsToNextEval--;
+      }
+      const cdElem = document.getElementById('cycle-countdown-sec');
+      if (cdElem) cdElem.textContent = `in ${secondsToNextEval}s`;
+
+      const pct = Math.min(100, Math.max(0, ((cycleIntervalSec - secondsToNextEval) / cycleIntervalSec) * 100));
+      const fill = document.getElementById('scrubber-fill');
+      if (fill) fill.style.width = `${pct}%`;
+    }, 1000);
+
+    // --- 2. Initialize Main TradingView Candlestick & Volume Chart ---
+    const tvContainer = document.getElementById('tv-chart');
+    const mainChart = LightweightCharts.createChart(tvContainer, {
+      width: tvContainer.clientWidth || 800,
+      height: tvContainer.clientHeight || 450,
+      autoSize: true,
+      layout: {
+        background: { color: '#060709' },
+        textColor: '#6b7280',
+        fontFamily: "'JetBrains Mono', monospace",
+      },
+      grid: {
+        vertLines: { color: '#101219' },
+        horzLines: { color: '#101219' },
+      },
+      crosshair: {
+        mode: LightweightCharts.CrosshairMode.Normal,
+      },
+      rightPriceScale: {
+        borderColor: '#14161d',
+        scaleMargins: {
+          top: 0.08,
+          bottom: 0.25, // Reserve bottom 25% for Volume
+        },
+      },
+      timeScale: {
+        borderColor: '#14161d',
+        timeVisible: true,
+        secondsVisible: false,
+        rightOffset: 3,
+      },
+    });
+
+    // Candlestick Series
+    const candleSeries = mainChart.addCandlestickSeries({
+      upColor: '#22c55e',
+      downColor: '#ef4444',
+      borderVisible: false,
+      wickUpColor: '#22c55e',
+      wickDownColor: '#ef4444',
+    });
+
+    // Docked Volume Histogram Series in bottom 25%
+    const volumeSeries = mainChart.addHistogramSeries({
+      priceFormat: {
+        type: 'volume',
+      },
+      priceScaleId: '', // Overlay in same pane
+    });
+    mainChart.priceScale('').applyOptions({
+      scaleMargins: {
+        top: 0.75, // Top 75% blank for candles
+        bottom: 0,
+      },
+    });
+
+    // Crosshair Sync for Top OHLC Header
+    mainChart.subscribeCrosshairMove(param => {
+      if (!param || !param.time || !param.seriesData.get(candleSeries)) {
+        return;
+      }
+      const bar = param.seriesData.get(candleSeries);
+      if (bar) {
+        document.getElementById('ohlc-o').textContent = bar.open.toFixed(1);
+        document.getElementById('ohlc-h').textContent = bar.high.toFixed(1);
+        document.getElementById('ohlc-l').textContent = bar.low.toFixed(1);
+        document.getElementById('ohlc-c').textContent = bar.close.toFixed(1);
+        const chg = ((bar.close - bar.open) / bar.open) * 100;
+        const chgElem = document.getElementById('ohlc-chg');
+        chgElem.textContent = `${chg >= 0 ? '+' : ''}${chg.toFixed(2)}%`;
+        chgElem.style.color = chg >= 0 ? '#22c55e' : '#ef4444';
+      }
+    });
+
+    // --- 3. Initialize Bottom Equity Chart ---
+    const eqContainer = document.getElementById('equity-chart');
+    const equityChart = LightweightCharts.createChart(eqContainer, {
+      width: eqContainer.clientWidth || 800,
+      height: eqContainer.clientHeight || 200,
+      autoSize: true,
+      layout: {
+        background: { color: '#060709' },
+        textColor: '#6b7280',
+        fontFamily: "'JetBrains Mono', monospace",
+        fontSize: 10,
+      },
+      grid: {
+        vertLines: { color: '#0e1017' },
+        horzLines: { color: '#0e1017' },
+      },
+      rightPriceScale: {
+        borderColor: '#14161d',
+        autoScale: true,
+      },
+      timeScale: {
+        borderColor: '#14161d',
+        timeVisible: true,
+        secondsVisible: false,
+        rightOffset: 3,
+      },
+    });
+
+    const jevLine = equityChart.addLineSeries({
+      color: '#3b82f6',
+      lineWidth: 2,
+      priceLineVisible: false,
+      lastValueVisible: true,
+      title: '',
+    });
+
+    const beforeCostsLine = equityChart.addLineSeries({
+      color: '#94a3b8',
+      lineWidth: 1.5,
+      lineStyle: LightweightCharts.LineStyle.Solid,
+      priceLineVisible: false,
+      lastValueVisible: false,
+      title: '',
+    });
+
+    const buyHoldLine = equityChart.addLineSeries({
+      color: '#eab308',
+      lineWidth: 1.5,
+      lineStyle: LightweightCharts.LineStyle.Solid,
+      priceLineVisible: false,
+      lastValueVisible: true,
+      title: '',
+    });
+
+    // Reference Baseline Price Line at $10,000.00
+    try {
+      jevLine.createPriceLine({
+        price: 10000.0,
+        color: '#374151',
+        lineWidth: 1,
+        lineStyle: LightweightCharts.LineStyle.Dashed,
+        axisLabelVisible: true,
+        title: '$10,000.00',
+      });
+    } catch (e) {
+      console.warn("Baseline price line warning:", e);
+    }
+
+    // Auto-resize charts on window change
+    function handleResize() {
+      if (tvContainer && tvContainer.clientWidth > 0 && tvContainer.clientHeight > 0) {
+        mainChart.applyOptions({ width: tvContainer.clientWidth, height: tvContainer.clientHeight });
+      }
+      if (eqContainer && eqContainer.clientWidth > 0 && eqContainer.clientHeight > 0) {
+        equityChart.applyOptions({ width: eqContainer.clientWidth, height: eqContainer.clientHeight });
+      }
+    }
+    window.addEventListener('resize', handleResize);
+    setTimeout(handleResize, 150);
+
+    function updateOhlcHeader(candle) {
+      if (!candle) return;
+      const o = (candle.open !== undefined ? candle.open : 0).toFixed(1);
+      const h = (candle.high !== undefined ? candle.high : 0).toFixed(1);
+      const l = (candle.low !== undefined ? candle.low : 0).toFixed(1);
+      const c = (candle.close !== undefined ? candle.close : 0).toFixed(1);
+      const chg = candle.open > 0 ? ((candle.close - candle.open) / candle.open) * 100 : 0;
+      const isUp = chg >= 0;
+      const color = isUp ? '#22c55e' : '#f43f5e';
+
+      document.getElementById('ohlc-o').textContent = o;
+      document.getElementById('ohlc-h').textContent = h;
+      document.getElementById('ohlc-l').textContent = l;
+      document.getElementById('ohlc-c').textContent = c;
+      const chgElem = document.getElementById('ohlc-chg');
+      chgElem.textContent = `${isUp ? '+' : ''}${chg.toFixed(2)}%`;
+
+      const bar = document.getElementById('ohlc-bar');
+      bar.style.color = color;
+    }
+
+    mainChart.subscribeCrosshairMove(param => {
+      if (param.time) {
+        const c = param.seriesData.get(candleSeries);
+        if (c) {
+          updateOhlcHeader(c);
+          return;
+        }
+      }
+      if (window._latestCandle) {
+        updateOhlcHeader(window._latestCandle);
+      }
+    });
+
+    // --- 4. Fetch & Update Candlesticks + Volume ---
+    let hasFitCandles = false;
+    async function loadCandles() {
+      try {
+        const res = await fetch(`/api/candles?symbol=${encodeURIComponent(currentSymbol)}`);
+        const data = await res.json();
+        if (data && data.length > 0) {
+          candleSeries.setData(data);
+
+          // Build matching volume histogram items
+          const volData = data.map(c => ({
+            time: c.time,
+            value: c.volume || 10.0,
+            color: c.close >= c.open ? 'rgba(34, 197, 94, 0.45)' : 'rgba(239, 68, 68, 0.45)',
+          }));
+          volumeSeries.setData(volData);
+
+          if (!hasFitCandles) {
+            mainChart.timeScale().fitContent();
+            hasFitCandles = true;
+          }
+
+          // Update OHLC header with latest candle
+          const latest = data[data.length - 1];
+          window._latestCandle = latest;
+          updateOhlcHeader(latest);
+        }
+      } catch (e) {
+        console.error("Failed to load candles:", e);
+      }
+    }
+
+    // --- 5. Fetch & Update Comparative Equity Curves ---
+    let hasFitEquity = false;
+    async function loadEquityHistory() {
+      try {
+        const res = await fetch('/api/equity');
+        const history = await res.json();
+        if (history && history.length > 0) {
+          const jevPts = history.map(h => ({ time: h.time, value: h.jev }));
+          const bcPts = history.map(h => ({ time: h.time, value: h.before_costs }));
+          const bnhPts = history.map(h => ({ time: h.time, value: h.buy_and_hold }));
+
+          jevLine.setData(jevPts);
+          beforeCostsLine.setData(bcPts);
+          buyHoldLine.setData(bnhPts);
+
+          if (!hasFitEquity) {
+            equityChart.timeScale().fitContent();
+            hasFitEquity = true;
+          }
+        }
+      } catch (e) {
+        console.error("Failed to load equity history:", e);
+      }
+    }
+
+    // --- 6. Fetch & Update Trade Markers ---
+    async function loadMarkers() {
+      try {
+        const res = await fetch(`/api/markers?symbol=${encodeURIComponent(currentSymbol)}`);
+        const markers = await res.json();
+        candleSeries.setMarkers(markers || []);
+      } catch (e) {
+        console.error("Failed to load markers:", e);
+      }
+    }
+
+    // --- 7. Full Telemetry & Sidebar State Update ---
+    async function updateDashboardState() {
+      try {
+        const res = await fetch(`/api/state?symbol=${encodeURIComponent(currentSymbol)}`);
+        const d = await res.json();
+
+        // 1. Account Section
+        const equity = d.portfolio.total_equity_usdt || 10000.0;
+        const netDiff = equity - 10000.0;
+        const netPct = (netDiff / 10000.0) * 100;
+
+        document.getElementById('account-equity').textContent = `$${equity.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+        const chgElem = document.getElementById('account-change');
+        chgElem.textContent = `${netDiff >= 0 ? '+' : ''}$${netDiff.toFixed(2)}  ${netPct >= 0 ? '+' : ''}${netPct.toFixed(2)}%`;
+        chgElem.style.color = netDiff > 0.01 ? '#22c55e' : netDiff < -0.01 ? '#ef4444' : 'var(--text-muted)';
+
+        // 2. Position Section (Policy Not Argmax)
+        const pSide = d.portfolio.position_side || "NONE";
+        const hasPos = d.portfolio.has_open_position && pSide !== "NONE";
+        const posBadge = document.getElementById('position-side');
+        const posEntry = document.getElementById('position-entry');
+        const posMeta = document.getElementById('position-meta');
+        const closeBtn = document.getElementById('btn-close-pos');
+
+        if (hasPos) {
+          posBadge.textContent = `${pSide} 2x`;
+          posBadge.className = `position-badge ${pSide.toLowerCase()}`;
+          posEntry.textContent = `entry ${d.portfolio.entry_price ? d.portfolio.entry_price.toFixed(1) : '--'}`;
+          const unpnl = d.portfolio.unrealized_pnl_usd || 0.0;
+          const roe = d.portfolio.roe_pct || 0.0;
+          const mins = d.portfolio.minutes_held || 0;
+          posMeta.textContent = `${unpnl >= 0 ? '+' : ''}$${unpnl.toFixed(2)} (${roe >= 0 ? '+' : ''}${roe.toFixed(2)}% ROE) • ${mins}m held`;
+          posMeta.style.color = unpnl >= 0 ? '#22c55e' : '#ef4444';
+          if (closeBtn) closeBtn.style.display = 'inline-block';
+        } else {
+          posBadge.textContent = "WAIT";
+          posBadge.className = "position-badge wait";
+          posEntry.textContent = "entry --";
+          posMeta.textContent = "0.00% • 0m held";
+          posMeta.style.color = "var(--text-muted)";
+          if (closeBtn) closeBtn.style.display = 'none';
+        }
+
+        // 3. Probability Distribution
+        let pLong = 0, pWait = 100, pShort = 0;
+        if (d.decision && d.decision.probabilities) {
+          const pb = d.decision.probabilities;
+          pLong = Math.round((pb.BUY || pb.LONG || 0) * 100);
+          pWait = Math.round((pb.HOLD || pb.WAIT || 0) * 100);
+          pShort = Math.round((pb.SELL || pb.SHORT || 0) * 100);
+        } else if (d.directional_lean) {
+          pLong = Math.round((d.directional_lean.p_long || 0) * 100);
+          pWait = Math.round((d.directional_lean.p_wait || 0) * 100);
+          pShort = Math.round((d.directional_lean.p_short || 0) * 100);
+        }
+
+        document.getElementById('prob-pct-long').textContent = `${pLong}%`;
+        document.getElementById('prob-bar-long').style.width = `${pLong}%`;
+        document.getElementById('prob-pct-wait').textContent = `${pWait}%`;
+        document.getElementById('prob-bar-wait').style.width = `${pWait}%`;
+        document.getElementById('prob-pct-short').textContent = `${pShort}%`;
+        document.getElementById('prob-bar-short').style.width = `${pShort}%`;
+
+        // 4. Directional Lean
+        if (d.directional_lean) {
+          const leanVal = d.directional_lean.lean || 0.0;
+          const pick = d.directional_lean.own_pick || "WAIT";
+          const thresh = d.directional_lean.threshold || 0.08;
+          const leftBar = document.getElementById('lean-bar-left');
+          const rightBar = document.getElementById('lean-bar-right');
+
+          if (leanVal < 0) {
+            // Negative -> Lean SHORT (fills to the left)
+            const leftPct = Math.min(100, Math.abs(leanVal) * 100);
+            leftBar.style.width = `${leftPct}%`;
+            rightBar.style.width = '0%';
+          } else {
+            // Positive -> Lean LONG (fills to the right)
+            const rightPct = Math.min(100, leanVal * 100);
+            rightBar.style.width = `${rightPct}%`;
+            leftBar.style.width = '0%';
+          }
+
+          const pickElem = document.getElementById('lean-own-pick');
+          pickElem.textContent = pick;
+          pickElem.style.color = pick === 'SHORT' ? '#ef4444' : pick === 'LONG' ? '#22c55e' : '#cbd5e1';
+
+          document.getElementById('lean-stat-text').textContent = `lean ${leanVal >= 0 ? '+' : ''}${leanVal.toFixed(2)} • acts at ±${thresh.toFixed(2)}`;
+
+          // Update sensitivity pills
+          document.querySelectorAll('.thresh-pill').forEach(btn => btn.classList.remove('active'));
+          if (thresh <= 0.04) {
+            document.getElementById('thresh-03')?.classList.add('active');
+          } else if (thresh <= 0.10) {
+            document.getElementById('thresh-08')?.classList.add('active');
+          } else {
+            document.getElementById('thresh-15')?.classList.add('active');
+          }
+        }
+
+        // 5. 2x2 Stats Grid
+        const confPct = d.decision ? Math.round(d.decision.confidence * 100) : 0;
+        document.getElementById('stat-confidence').textContent = `${confPct}%`;
+        document.getElementById('stat-latency').textContent = `${d.latency_ms || 333}ms`;
+        document.getElementById('stat-decisions').textContent = d.decisions_count || 1;
+        const markPrice = (d.derivatives && d.derivatives.mark_price > 0) ? d.derivatives.mark_price : d.price;
+        document.getElementById('stat-price').textContent = markPrice.toFixed(1);
+
+        // 6. Performance Breakdown
+        const bnh = d.buy_and_hold_equity || 10000.0;
+        document.getElementById('perf-bnh').textContent = `$${bnh.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+
+        const bc = d.portfolio.before_costs_equity_usdt || equity;
+        document.getElementById('perf-before-costs').textContent = `$${bc.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+
+        document.getElementById('perf-trades').textContent = d.performance.total_trades || 0;
+        document.getElementById('perf-fees').textContent = `$${(d.portfolio.cumulative_fees_usdt || 0).toFixed(2)}`;
+        document.getElementById('perf-wl').textContent = d.performance.closed_w_l || '0 / 0';
+        document.getElementById('perf-stopped').textContent = d.performance.stopped_out || 0;
+        document.getElementById('perf-dd').textContent = `${(d.portfolio.max_drawdown_pct || 0).toFixed(2)}%`;
+
+        if (d.cycle_interval_seconds) {
+          cycleIntervalSec = d.cycle_interval_seconds;
+        }
+
+        // 7. Pause/Play Auto-Trade Button
+        const pauseBtn = document.getElementById('btn-pause-toggle');
+        const playIcon = document.getElementById('play-icon');
+        const playText = document.getElementById('play-text');
+        if (d.daemon_active) {
+          pauseBtn.className = "btn-play";
+          playIcon.textContent = "❚❚";
+          playText.textContent = "Pause Auto-Trade";
+        } else {
+          pauseBtn.className = "btn-play paused";
+          playIcon.textContent = "▶";
+          playText.textContent = "Resume Auto-Trade";
+        }
+
+      } catch (e) {
+        console.error("Dashboard state update error:", e);
+      }
+    }
+
+    // --- 8. Controls: Policy Sensitivity, Manual Trade, Pause, Cadence, Reset ---
+    async function setPolicyThreshold(thresh) {
+      document.querySelectorAll('.thresh-pill').forEach(btn => btn.classList.remove('active'));
+      const id = thresh <= 0.04 ? 'thresh-03' : (thresh <= 0.10 ? 'thresh-08' : 'thresh-15');
+      const activeBtn = document.getElementById(id);
+      if (activeBtn) activeBtn.classList.add('active');
+
+      try {
+        await fetch('/api/policy/threshold', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ threshold: thresh }),
+        });
+        await updateDashboardState();
+        await loadMarkers();
+        await loadEquityHistory();
+      } catch (e) {
+        console.error("Policy threshold error:", e);
+      }
+    }
+
+    async function manualTrade(action) {
+      try {
+        await fetch('/api/manual/trade', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: action, symbol: currentSymbol }),
+        });
+        await updateDashboardState();
+        await loadMarkers();
+        await loadEquityHistory();
+      } catch (e) {
+        console.error("Manual trade error:", e);
+      }
+    }
+
+    async function togglePause() {
+      try {
+        await fetch('/api/daemon/toggle', { method: 'POST' });
+        await updateDashboardState();
+      } catch (e) {
+        console.error("Toggle pause error:", e);
+      }
+    }
+
+    async function setSpeed(mult) {
+      document.querySelectorAll('.speed-pill').forEach(btn => btn.classList.remove('active'));
+      const activeBtn = document.getElementById(`spd-${mult}`);
+      if (activeBtn) activeBtn.classList.add('active');
+
+      cycleIntervalSec = mult === 1 ? 60 : (mult === 2 ? 30 : 15);
+      secondsToNextEval = cycleIntervalSec;
+
+      try {
+        await fetch('/api/speed', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ multiplier: mult }),
+        });
+      } catch (e) {
+        console.error("Speed update error:", e);
+      }
+    }
+
+    async function triggerEvaluation() {
+      try {
+        await fetch('/api/evaluate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ symbol: currentSymbol }),
+        });
+        secondsToNextEval = cycleIntervalSec;
+        await updateDashboardState();
+        await loadMarkers();
+        await loadEquityHistory();
+      } catch (e) {
+        console.error("Evaluation trigger error:", e);
+      }
+    }
+
+
+
+    // --- 9. Startup & Interval Loops ---
+    handleRouteFromUrl(true);
+    fetchMarkets();
+    loadCandles();
+    updateDashboardState();
+    loadEquityHistory();
+    loadMarkers();
+
+    // Fast polling: Master Overview (every 2.5s)
+    setInterval(() => {
+      if (currentView === 'master') {
+        fetchMasterOverview();
+      } else if (currentView === 'history') {
+        fetchTradeHistory();
+      }
+    }, 2500);
+
+    // Fast polling: candles & markers (every 3.5s when viewing terminal)
+    setInterval(() => {
+      if (currentView === 'terminal') {
+        loadCandles();
+        loadMarkers();
+      }
+    }, 3500);
+
+    // Live state & ticker update (every 1.5s when viewing terminal)
+    setInterval(() => {
+      if (currentView === 'terminal') {
+        updateDashboardState();
+      }
+    }, 1500);
+
+    // Equity curve refresh (every 5s when viewing terminal)
+    setInterval(() => {
+      if (currentView === 'terminal') {
+        loadEquityHistory();
+      }
+    }, 5000);
+  </script>
+</body>
+</html>
