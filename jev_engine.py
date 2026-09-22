@@ -202,26 +202,25 @@ class JevEngine:
 
         # 1. Macro & micro trend alignment
         trend_score = 0.0
-        t1h_str = str(ind.get("trend_alignment_1h", "NEUTRAL")).upper()
-        t5m_str = str(ind.get("trend_alignment_5m", "NEUTRAL")).upper()
+        t1h = str(ind.get("trend_alignment_1h", "NEUTRAL") or "").upper()
+        t5m = str(ind.get("trend_alignment_5m", "NEUTRAL") or "").upper()
+        is_bull_1h = "BULL" in t1h
+        is_bear_1h = "BEAR" in t1h
+        is_bull_5m = "BULL" in t5m
+        is_bear_5m = "BEAR" in t5m
 
-        is_t1h_bull = "BULL" in t1h_str
-        is_t1h_bear = "BEAR" in t1h_str
-        is_t5m_bull = "BULL" in t5m_str
-        is_t5m_bear = "BEAR" in t5m_str
-
-        if is_t1h_bull and is_t5m_bull:
-            trend_score += 0.50  # Confirmed multi-timeframe bullish trend
-        elif is_t1h_bear and is_t5m_bear:
-            trend_score -= 0.50  # Confirmed multi-timeframe bearish breakdown
-        elif is_t1h_bull and not is_t5m_bear:
-            trend_score += 0.30  # Macro bull with neutral 5m
-        elif is_t1h_bear and not is_t5m_bull:
-            trend_score -= 0.30  # Macro bear with neutral 5m
-        elif is_t1h_bull and is_t5m_bear:
-            trend_score += 0.10  # Pullback dip inside 1h uptrend (buying opportunity)
-        elif is_t1h_bear and is_t5m_bull:
-            trend_score -= 0.10  # Bear rally inside 1h downtrend (shorting opportunity)
+        if is_bull_1h and is_bull_5m:
+            trend_score += 0.45  # Confirmed multi-timeframe bullish trend
+        elif is_bear_1h and is_bear_5m:
+            trend_score -= 0.45  # Confirmed multi-timeframe bearish breakdown
+        elif is_bull_1h and not is_bear_5m:
+            trend_score += 0.25  # Macro bull with neutral/recovering 5m
+        elif is_bear_1h and not is_bull_5m:
+            trend_score -= 0.25  # Macro bear with neutral/recovering 5m
+        elif is_bull_1h and is_bear_5m:
+            trend_score += 0.05  # Dip inside macro uptrend (buy dip setup)
+        elif is_bear_1h and is_bull_5m:
+            trend_score -= 0.05  # Rally inside macro downtrend (fade rally setup)
 
         # 2. VWAP deviation
         vwap_pct = flow.get("price_to_vwap_pct", 0.0)
@@ -249,12 +248,12 @@ class JevEngine:
             trend_score += 0.15  # Oversold bounce potential
 
         macd_cross = ind.get("macd_cross", "NEUTRAL")
-        if macd_cross == "bullish_cross" or macd_cross == "BULLISH_CROSS":
+        if macd_cross == "BULLISH_CROSS":
             trend_score += 0.10
-        elif macd_cross == "bearish_cross" or macd_cross == "BEARISH_CROSS":
+        elif macd_cross == "BEARISH_CROSS":
             trend_score -= 0.10
 
-        # 5. Bollinger Band extreme position signals
+        # 6. Bollinger Band extreme position signals
         boll_pct_b = ind.get("bollinger_percent_b", 0.5)
         if boll_pct_b is not None:
             if boll_pct_b < 0.15:
@@ -262,7 +261,7 @@ class JevEngine:
             elif boll_pct_b > 0.85:
                 trend_score -= 0.12  # Strong overbought mean reversion
 
-        # 6. Funding rate edge
+        # 5. Funding rate edge
         funding = deriv.get("funding_rate_8h", 0.0)
         if funding < -0.0001:
             trend_score += 0.08  # Negative funding: shorts pay longs (bullish squeeze potential)
@@ -275,26 +274,26 @@ class JevEngine:
         # Convert score to calibrated Choice probabilities
         if s > 0.12:
             # Bullish expansion
-            p_buy = min(0.85, 0.52 + (s * 0.38))
-            p_sell = max(0.04, 0.14 - (s * 0.12))
-            p_hold = max(0.08, 1.0 - p_buy - p_sell)
+            p_buy = min(0.82, 0.46 + (s * 0.40))
+            p_sell = max(0.06, 0.18 - (s * 0.15))
+            p_hold = max(0.12, 1.0 - p_buy - p_sell)
             action = "BUY"
             regime = "BULLISH_EXPANSION"
-            regime_conf = round(min(0.95, 0.65 + abs(s) * 0.30), 2)
-            risk_score = 1.0
+            regime_conf = round(min(0.95, 0.60 + abs(s) * 0.35), 2)
+            risk_score = 1.2
         elif s < -0.12:
             # Bearish breakdown
-            p_sell = min(0.85, 0.52 + (abs(s) * 0.38))
-            p_buy = max(0.04, 0.14 - (abs(s) * 0.12))
-            p_hold = max(0.08, 1.0 - p_buy - p_sell)
+            p_sell = min(0.82, 0.46 + (abs(s) * 0.40))
+            p_buy = max(0.06, 0.18 - (abs(s) * 0.15))
+            p_hold = max(0.12, 1.0 - p_buy - p_sell)
             action = "SELL"
             regime = "BEARISH_BREAKDOWN"
-            regime_conf = round(min(0.95, 0.65 + abs(s) * 0.30), 2)
-            risk_score = 1.2
+            regime_conf = round(min(0.95, 0.60 + abs(s) * 0.35), 2)
+            risk_score = 1.4
         else:
             # Range bound consolidation
-            p_hold = 0.56
-            p_buy = round(0.22 + (s * 0.20), 4)
+            p_hold = 0.54
+            p_buy = round(0.23 + (s * 0.20), 4)
             p_sell = round(1.0 - p_hold - p_buy, 4)
             action = "HOLD"
             regime = "RANGE_BOUND_CONSOLIDATION"
@@ -307,7 +306,7 @@ class JevEngine:
             "HOLD": round(p_hold, 4),
         }
         action_conf = round(max(p_buy, p_sell, p_hold), 3)
-        entry_conviction = round(min(0.92, max(0.10, 0.25 + (abs(s) * 0.68))), 3)
+        entry_conviction = round(min(0.90, max(0.05, 0.20 + (abs(s) * 0.65))), 3)
 
         # Portfolio exit urgency check
         has_pos = portfolio_state.get("has_open_position", False)
